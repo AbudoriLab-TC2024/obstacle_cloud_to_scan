@@ -12,6 +12,8 @@ cmake_policy(SET CMP0074 NEW)
 find_package(ament_cmake REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(sensor_msgs REQUIRED)
+find_package(tf2_ros REQUIRED)
+find_package(tf2_sensor_msgs REQUIRED)
 find_package(pcl_conversions REQUIRED)
 find_package(PCL REQUIRED)
 find_package(pointcloud_to_laserscan REQUIRED)
@@ -19,7 +21,7 @@ find_package(yaml-cpp REQUIRED)
 
 # 実行ファイルの生成
 add_executable(obstacle_cloud_to_scan src/obstacle_cloud_to_scan.cpp)
-ament_target_dependencies(obstacle_cloud_to_scan rclcpp sensor_msgs PCL pcl_conversions pointcloud_to_laserscan)
+ament_target_dependencies(obstacle_cloud_to_scan rclcpp tf2_ros tf2_sensor_msgs sensor_msgs PCL pcl_conversions pointcloud_to_laserscan)
 
 # インクルードディレクトリの追加
 include_directories(

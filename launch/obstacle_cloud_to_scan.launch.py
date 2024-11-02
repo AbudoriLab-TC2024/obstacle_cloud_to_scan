@@ -26,7 +26,7 @@ def generate_launch_description():
                 'robot_box_size': [1.0, 1.0, 0.5],
                 'robot_box_position': [0.0, 0.0, 0.25],
                 'max_slope_angle': 5.0,
-                'use_gpu': True
+                'use_gpu': False
             }],
             remappings=[
                 ('input_topic', '/livox_cloud_in'),

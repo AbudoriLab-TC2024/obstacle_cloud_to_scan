@@ -8,6 +8,10 @@
 #include <pcl/features/normal_3d.h>
 #include <pcl_conversions/pcl_conversions.h>
 #include <cmath>
+#include <tf2_ros/transform_listener.h>
+#include <tf2_ros/buffer.h>
+#include <tf2_sensor_msgs/tf2_sensor_msgs.h>
+#include <geometry_msgs/msg/transform_stamped.hpp>
 
 class ObstacleCloudToScanNode : public rclcpp::Node
 {
@@ -33,7 +37,7 @@ public:
 private:
     void declare_parameters()
     {
-        this->declare_parameter<std::string>("input_topic", "/livox_cloud_in");
+        this->declare_parameter<std::string>("input_topic", "/input_cloud");
         this->declare_parameter<std::string>("output_topic", "/filtered_point_cloud");
         this->declare_parameter<std::string>("laser_scan_topic", "/scan");
         this->declare_parameter<double>("voxel_leaf_size", 0.1);
@@ -74,10 +78,10 @@ private:
         RCLCPP_DEBUG(this->get_logger(), "Received point cloud message");
         pcl::PointCloud<pcl::PointXYZ>::Ptr cloud(new pcl::PointCloud<pcl::PointXYZ>);
         pcl::fromROSMsg(*msg, *cloud);
-        RCLCPP_DEBUG(this->get_logger(), "cloud size: %lu", cloud->points.size());
+
         if (cloud->points.empty())
         {
-            RCLCPP_WARN(this->get_logger(), "There are no point clouds to process...");
+            RCLCPP_WARN(this->get_logger(), "Could not read point cloud data cloud size: %lu", cloud->points.size());
             return;
         }
 
@@ -98,7 +102,12 @@ private:
         // フィルタリング後の点群をパブリッシュ
         RCLCPP_DEBUG(this->get_logger(), "Publishing filtered point cloud");
         sensor_msgs::msg::PointCloud2 filtered_msg;
-        pcl::toROSMsg(*filtered_cloud, filtered_msg);
+        //pcl::toROSMsg(*filtered_cloud, filtered_msg);
+
+        // テストでそのままの点群を投げ返す
+        pcl::toROSMsg(*downsampled_cloud, filtered_msg);
+
+        
         filtered_msg.header = msg->header;
         filtered_cloud_publisher_->publish(filtered_msg);
 
@@ -142,7 +151,7 @@ private:
         {
             // GPUを使用した法線推定処理
             RCLCPP_DEBUG(this->get_logger(), "Using GPU for normal estimation");
-            // GPU実装はコメントアウトされています
+            // GPU対応の法線推定処理を実装する（ここでは仮にCUDAを利用した例を示す）
         }
         else
         {
@@ -205,6 +214,9 @@ private:
     double scan_angle_max_ = M_PI;
     double scan_range_min_ = 0.0;
     double scan_range_max_ = 10.0;
+
+    std::shared_ptr<tf2_ros::Buffer> tf_buffer_;
+    std::shared_ptr<tf2_ros::TransformListener> tf_listener_;
 };
 
 int main(int argc, char **argv)
