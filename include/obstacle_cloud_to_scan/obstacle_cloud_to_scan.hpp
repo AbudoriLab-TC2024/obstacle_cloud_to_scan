@@ -20,10 +20,33 @@ private:
     void declare_parameters();
     void get_parameters();
     void pointCloudCallback(const sensor_msgs::msg::PointCloud2::SharedPtr msg);
-    pcl::PointCloud<pcl::PointXYZ>::Ptr downsamplePointCloud(const pcl::PointCloud<pcl::PointXYZ>::Ptr &cloud);
-    pcl::PointCloud<pcl::Normal>::Ptr estimateNormals(const pcl::PointCloud<pcl::PointXYZ>::Ptr &cloud);
-    pcl::PointCloud<pcl::PointXYZ>::Ptr filterObstacles(const pcl::PointCloud<pcl::PointXYZ>::Ptr &cloud, const pcl::PointCloud<pcl::Normal>::Ptr &normals);
+//    pcl::PointCloud<pcl::PointXYZ>::Ptr downsamplePointCloud(const pcl::PointCloud<pcl::PointXYZ>::Ptr &cloud);
+ //   pcl::PointCloud<pcl::Normal>::Ptr estimateNormals(const pcl::PointCloud<pcl::PointXYZ>::Ptr &cloud);
+  //  pcl::PointCloud<pcl::PointXYZ>::Ptr filterObstacles(const pcl::PointCloud<pcl::PointXYZ>::Ptr &cloud, const pcl::PointCloud<pcl::Normal>::Ptr &normals);
     void publishLaserScan(const pcl::PointCloud<pcl::PointXYZ>::Ptr &points, const std_msgs::msg::Header &header);
+  
+  /*  
+    pcl::PointCloud<pcl::PointXYZ>::Ptr downsamplePointCloud(
+    const pcl::PointCloud<pcl::PointXYZ>::Ptr &cloud,
+    double voxel_leaf_size,
+    bool use_gpu,
+    rclcpp::Logger logger);
+    
+    pcl::PointCloud<pcl::PointXYZ>::Ptr applyPassThroughFilter(
+    const pcl::PointCloud<pcl::PointXYZ>::Ptr &cloud,
+    const std::vector<double> &robot_box_size,
+    rclcpp::Logger logger);
+    
+    pcl::PointCloud<pcl::Normal>::Ptr estimateNormals(
+    const pcl::PointCloud<pcl::PointXYZ>::Ptr &cloud,
+    rclcpp::Logger logger);
+    
+    pcl::PointCloud<pcl::PointXYZ>::Ptr filterObstacles(
+    const pcl::PointCloud<pcl::PointXYZ>::Ptr &cloud,
+    const pcl::PointCloud<pcl::Normal>::Ptr &normals,
+    double max_slope_angle,
+    rclcpp::Logger logger);
+    */
 
     rclcpp::Subscription<sensor_msgs::msg::PointCloud2>::SharedPtr point_cloud_subscriber_;
     rclcpp::Publisher<sensor_msgs::msg::PointCloud2>::SharedPtr filtered_cloud_publisher_;

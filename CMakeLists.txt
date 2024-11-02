@@ -20,7 +20,12 @@ find_package(pointcloud_to_laserscan REQUIRED)
 find_package(yaml-cpp REQUIRED)
 
 # 実行ファイルの生成
+add_library(pcl_functions src/pcl_functions.cpp)
+target_link_libraries(pcl_functions ${PCL_LIBRARIES})
+ament_target_dependencies(pcl_functions rclcpp PCL)
+
 add_executable(obstacle_cloud_to_scan src/obstacle_cloud_to_scan.cpp)
+target_link_libraries(obstacle_cloud_to_scan pcl_functions ${PCL_LIBRARIES})
 ament_target_dependencies(obstacle_cloud_to_scan rclcpp tf2_ros tf2_sensor_msgs sensor_msgs PCL pcl_conversions pointcloud_to_laserscan)
 
 # インクルードディレクトリの追加
@@ -36,6 +41,7 @@ target_link_libraries(${PROJECT_NAME} yaml-cpp)
 # インストール設定
 install(TARGETS
   obstacle_cloud_to_scan
+  pcl_functions
   DESTINATION lib/${PROJECT_NAME})
 
 # configディレクトリとlaunchディレクトリのインストール
