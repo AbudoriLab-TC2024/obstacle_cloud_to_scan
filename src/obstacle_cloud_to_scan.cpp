@@ -121,8 +121,33 @@ private:
         RCLCPP_DEBUG(this->get_logger(), "Normal estimation completed");
 
         RCLCPP_DEBUG(this->get_logger(), "Starting obstacle filtering");
-        pcl::PointCloud<pcl::PointXYZ>::Ptr filtered_cloud = filterObstacles(passthrough_cloud, normals, max_slope_angle_, this->get_logger());
+        pcl::PointCloud<pcl::PointXYZ>::Ptr filtered_cloud = filterObstacles(body_removed_cloud, normals, max_slope_angle_, this->get_logger());
         RCLCPP_DEBUG(this->get_logger(), "Obstacle filtering completed");
+
+        //　テスト：法線のZ成分を可視化
+        pcl::PointCloud<pcl::PointXYZRGB>::Ptr colored_cloud(new pcl::PointCloud<pcl::PointXYZRGB>());
+        for (size_t i = 0; i < cloud->points.size(); ++i) {
+            pcl::PointXYZRGB point;
+            point.x = cloud->points[i].x;
+            point.y = cloud->points[i].y;
+            point.z = cloud->points[i].z;
+
+            // 法線のZ成分を利用して色付け
+            float normal_z = normals->points[i].normal_z;
+            uint8_t r = static_cast<uint8_t>((normal_z + 1.0) / 2.0 * 255);  // -1.0 to 1.0 を 0 to 255 にマッピング
+            uint8_t g = 0;  // 任意で設定
+            uint8_t b = static_cast<uint8_t>((1.0 - normal_z) / 2.0 * 255);  // Z成分に基づいた反対色
+            point.r = r;
+            point.g = g;
+            point.b = b;
+
+            colored_cloud->points.push_back(point);
+        }
+        colored_cloud->width = cloud->width;
+        colored_cloud->height = cloud->height;
+        colored_cloud->is_dense = cloud->is_dense;
+
+
 
         // フィルタリング後の点群をパブリッシュ
         RCLCPP_DEBUG(this->get_logger(), "Publishing filtered point cloud");
@@ -130,7 +155,7 @@ private:
         //pcl::toROSMsg(*filtered_cloud, filtered_msg);
 
         // test
-        pcl::toROSMsg(*body_removed_cloud, filtered_msg);
+        pcl::toROSMsg(*filtered_cloud, filtered_msg);
 
         filtered_msg.header.frame_id = "base_link";
         filtered_cloud_publisher_->publish(filtered_msg);

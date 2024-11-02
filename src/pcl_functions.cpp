@@ -48,7 +48,7 @@ pcl::PointCloud<pcl::Normal>::Ptr estimateNormals(
     normal_estimation.setInputCloud(cloud);
     pcl::search::KdTree<pcl::PointXYZ>::Ptr tree(new pcl::search::KdTree<pcl::PointXYZ>);
     normal_estimation.setSearchMethod(tree);
-    normal_estimation.setRadiusSearch(0.3);
+    normal_estimation.setRadiusSearch(0.6);
     normal_estimation.compute(*normals);
     RCLCPP_DEBUG(logger, "Normal estimation completed");
     return normals;
@@ -60,12 +60,16 @@ pcl::PointCloud<pcl::PointXYZ>::Ptr filterObstacles(
     double max_slope_angle,
     rclcpp::Logger logger)
 {
+    
+    RCLCPP_DEBUG(logger, "Normal cloud size: %ld", cloud->points.size());
+    RCLCPP_DEBUG(logger, "Max angle slope: %f", max_slope_angle);
     pcl::PointCloud<pcl::PointXYZ>::Ptr filtered_cloud(new pcl::PointCloud<pcl::PointXYZ>);
     for (size_t i = 0; i < cloud->points.size(); ++i)
     {
         const auto &normal = normals->points[i];
         double angle = std::acos(normal.normal_z) * 180.0 / M_PI;
-        if (angle <= max_slope_angle)
+        //if (angle >= max_slope_angle)
+        if (normal.normal_z <= 0.8 && normal.normal_z >= -0.8)
         {
             filtered_cloud->points.push_back(cloud->points[i]);
         }
