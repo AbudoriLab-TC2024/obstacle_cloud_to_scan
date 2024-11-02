@@ -23,8 +23,8 @@ def generate_launch_description():
                 'voxel_leaf_size': 0.1,
                 'max_distance': 10.0,
                 'min_distance': 0.1,
-                'robot_box_size': [1.0, 1.0, 0.5],
-                'robot_box_position': [0.0, 0.0, 0.25],
+                'robot_box_size': [0.6, 0.8, 1.0],
+                'robot_box_position': [0.0, 0.0, 0.0],
                 'max_slope_angle': 5.0,
                 'use_gpu': False
             }],

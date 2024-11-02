@@ -74,3 +74,33 @@ pcl::PointCloud<pcl::PointXYZ>::Ptr filterObstacles(
     return filtered_cloud;
 }
 
+pcl::PointCloud<pcl::PointXYZ>::Ptr removeRobotBody(
+    const pcl::PointCloud<pcl::PointXYZ>::Ptr &cloud,
+    const std::vector<double> &box_position,
+    const std::vector<double> &box_size,
+    rclcpp::Logger logger)
+{
+    pcl::CropBox<pcl::PointXYZ> crop_box_filter;
+    crop_box_filter.setInputCloud(cloud);
+
+    // ボックスの範囲を設定
+    Eigen::Vector4f min_point(-(box_size[0]/2)+box_position[0],
+                              -(box_size[1]/2)+box_position[1], 
+                              0.0+box_position[2], 1.0);
+    Eigen::Vector4f max_point(box_size[0]/2+box_position[0], 
+                              box_size[1]/2+box_position[1],
+                              box_size[2]+box_position[2], 1.0);
+    RCLCPP_DEBUG(logger, "min_point: %f, %f, %f", min_point[0], min_point[1], min_point[2]);
+    RCLCPP_DEBUG(logger, "max_point: %f, %f, %f", max_point[0], max_point[1], max_point[2]);
+
+    crop_box_filter.setMin(min_point);
+    crop_box_filter.setMax(max_point);
+    crop_box_filter.setNegative(true);  // ボックス内の点群を除去する
+
+    pcl::PointCloud<pcl::PointXYZ>::Ptr filtered_cloud(new pcl::PointCloud<pcl::PointXYZ>);
+    crop_box_filter.filter(*filtered_cloud);
+
+    RCLCPP_DEBUG(logger, "Removed points within the robot body bounding box.");
+
+    return filtered_cloud;
+}

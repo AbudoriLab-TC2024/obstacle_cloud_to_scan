@@ -42,10 +42,10 @@ private:
         this->declare_parameter<std::string>("output_topic", "/filtered_point_cloud");
         this->declare_parameter<std::string>("laser_scan_topic", "/scan");
         this->declare_parameter<double>("voxel_leaf_size", 0.1);
-        this->declare_parameter<double>("max_distance", 10.0);
+        this->declare_parameter<double>("max_distance", 40.0);
         this->declare_parameter<double>("min_distance", 0.1);
-        this->declare_parameter<std::vector<double>>("robot_box_size", {1.0, 1.0, 0.5});
-        this->declare_parameter<std::vector<double>>("robot_box_position", {0.0, 0.0, 0.25});
+        this->declare_parameter<std::vector<double>>("robot_box_size", {0.6, 0.6, 1.0});
+        this->declare_parameter<std::vector<double>>("robot_box_position", {0.0, 0.0, 0.0});
         this->declare_parameter<double>("max_slope_angle", 5.0);
         this->declare_parameter<bool>("use_gpu", true);
     }
@@ -109,10 +109,15 @@ private:
         RCLCPP_DEBUG(this->get_logger(), "Starting passthrough filter");
         pcl::PointCloud<pcl::PointXYZ>::Ptr passthrough_cloud = applyPassThroughFilter(downsampled_cloud, robot_box_size_, this->get_logger());
         RCLCPP_DEBUG(this->get_logger(), "Passthrough filter completed");
+        
+        // ロボットの体の除去
+        RCLCPP_DEBUG(this->get_logger(), "Removing robot body from point cloud");
+        pcl::PointCloud<pcl::PointXYZ>::Ptr body_removed_cloud = removeRobotBody(passthrough_cloud, robot_box_position_, robot_box_size_, this->get_logger());
+        RCLCPP_DEBUG(this->get_logger(), "Robot body removal completed");
 
         // 法線推定と傾斜の判定
         RCLCPP_DEBUG(this->get_logger(), "Starting normal estimation");
-        pcl::PointCloud<pcl::Normal>::Ptr normals = estimateNormals(passthrough_cloud, this->get_logger());
+        pcl::PointCloud<pcl::Normal>::Ptr normals = estimateNormals(body_removed_cloud, this->get_logger());
         RCLCPP_DEBUG(this->get_logger(), "Normal estimation completed");
 
         RCLCPP_DEBUG(this->get_logger(), "Starting obstacle filtering");
@@ -122,7 +127,11 @@ private:
         // フィルタリング後の点群をパブリッシュ
         RCLCPP_DEBUG(this->get_logger(), "Publishing filtered point cloud");
         sensor_msgs::msg::PointCloud2 filtered_msg;
-        pcl::toROSMsg(*filtered_cloud, filtered_msg);
+        //pcl::toROSMsg(*filtered_cloud, filtered_msg);
+
+        // test
+        pcl::toROSMsg(*body_removed_cloud, filtered_msg);
+
         filtered_msg.header.frame_id = "base_link";
         filtered_cloud_publisher_->publish(filtered_msg);
 
