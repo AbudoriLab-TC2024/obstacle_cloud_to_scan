@@ -16,6 +16,8 @@
   <depend>pcl_ros</depend>
   <depend>pointcloud_to_laserscan</depend>
 
+  <!-- 実行時の依存関係 -->
+
   <export>
     <build_type>ament_cmake</build_type>
   </export>

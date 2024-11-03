@@ -22,16 +22,24 @@ find_package(yaml-cpp REQUIRED)
 # 実行ファイルの生成
 add_library(pcl_functions src/pcl_functions.cpp)
 target_link_libraries(pcl_functions ${PCL_LIBRARIES})
-ament_target_dependencies(pcl_functions rclcpp PCL)
+ament_target_dependencies(pcl_functions rclcpp PCL pointcloud_to_laserscan)
 
 add_executable(obstacle_cloud_to_scan src/obstacle_cloud_to_scan.cpp)
-target_link_libraries(obstacle_cloud_to_scan pcl_functions ${PCL_LIBRARIES})
-ament_target_dependencies(obstacle_cloud_to_scan rclcpp tf2_ros tf2_sensor_msgs sensor_msgs PCL pcl_conversions pointcloud_to_laserscan)
+target_link_libraries(obstacle_cloud_to_scan pcl_functions ${pointcloud_to_laserscan_LIBRARIES} ${PCL_LIBRARIES})
+ament_target_dependencies(obstacle_cloud_to_scan 
+    rclcpp 
+    tf2_ros 
+    tf2_sensor_msgs 
+    sensor_msgs 
+    PCL 
+    pcl_conversions 
+    pointcloud_to_laserscan)
 
 # インクルードディレクトリの追加
 include_directories(
   include
   ${PCL_INCLUDE_DIRS}
+  ${pointcloud_to_laserscan_INCLUDE_DIRS}
 )
 
 # リンカ設定
