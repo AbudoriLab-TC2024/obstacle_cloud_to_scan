@@ -67,9 +67,12 @@ pcl::PointCloud<pcl::PointXYZ>::Ptr filterObstacles(
     for (size_t i = 0; i < cloud->points.size(); ++i)
     {
         const auto &normal = normals->points[i];
-        double angle = std::acos(normal.normal_z) * 180.0 / M_PI;
-        //if (angle >= max_slope_angle)
-        if (normal.normal_z <= 0.8 && normal.normal_z >= -0.8)
+        //double angle = std::acos(normal.normal_z) * 180.0 / M_PI;
+        double angle = (90 - max_slope_angle) * M_PI / 180;
+        double threshold_normal_z = std::sin(angle);
+        //RCLCPP_DEBUG(logger, "angle: %f", angle);
+        //RCLCPP_DEBUG(logger, "threshold_normal_z: %f", threshold_normal_z);
+        if (normal.normal_z <= threshold_normal_z && normal.normal_z >= -threshold_normal_z)
         {
             filtered_cloud->points.push_back(cloud->points[i]);
         }
