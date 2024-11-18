@@ -32,7 +32,9 @@ public:
             input_topic_, 10, std::bind(&ObstacleCloudToScanNode::pointCloudCallback, this, std::placeholders::_1));
         RCLCPP_DEBUG(this->get_logger(), "Subscribed to topic: %s", input_topic_.c_str());
 
-        filtered_cloud_publisher_ = this->create_publisher<sensor_msgs::msg::PointCloud2>(output_topic_, 10);
+        // Best Effort QoS設定
+        auto best_effort_qos = rclcpp::QoS(rclcpp::KeepLast(5)).best_effort();
+        filtered_cloud_publisher_ = this->create_publisher<sensor_msgs::msg::PointCloud2>(output_topic_, best_effort_qos);
         RCLCPP_DEBUG(this->get_logger(), "Publisher created for topic: %s", output_topic_.c_str());
     }
 
