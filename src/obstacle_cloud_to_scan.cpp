@@ -33,8 +33,11 @@ public:
         RCLCPP_DEBUG(this->get_logger(), "Subscribed to topic: %s", input_topic_.c_str());
 
         // Best Effort QoS設定
-        auto best_effort_qos = rclcpp::QoS(rclcpp::KeepLast(5)).best_effort();
-        filtered_cloud_publisher_ = this->create_publisher<sensor_msgs::msg::PointCloud2>(output_topic_, best_effort_qos);
+        //auto best_effort_qos = rclcpp::QoS(rclcpp::KeepLast(5)).best_effort();
+        auto reliable_qos = rclcpp::QoS(rclcpp::KeepLast(5)).reliable();
+        filtered_cloud_publisher_ = this->create_publisher<sensor_msgs::msg::PointCloud2>(output_topic_,rclcpp::QoS(rclcpp::KeepLast(10)));
+        //filtered_cloud_publisher_ = this->create_publisher<sensor_msgs::msg::PointCloud2>(output_topic_, reliable_qos);
+        //filtered_cloud_publisher_ = this->create_publisher<sensor_msgs::msg::PointCloud2>(output_topic_, best_effort_qos);
         RCLCPP_DEBUG(this->get_logger(), "Publisher created for topic: %s", output_topic_.c_str());
     }
 
@@ -215,6 +218,7 @@ private:
         pcl::toROSMsg(*filtered_cloud, filtered_msg);
 
         filtered_msg.header.frame_id = "base_link";
+        filtered_msg.header.stamp = this->get_clock()->now();
         filtered_cloud_publisher_->publish(filtered_msg);
         
         auto callback_end_time = std::chrono::high_resolution_clock::now(); // 計測終了
