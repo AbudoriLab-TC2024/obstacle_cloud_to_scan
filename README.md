@@ -15,7 +15,7 @@ obstacle_cloud_to_scanは、LiDARセンサーからの3D点群データを処理
 - 上り坂などでは、本来進行可能な坂道も障害物として認識してしまう。
 - ロボットが乗り越え可能な段差かどうかの判断ができない。
 
-### obstacle-cloud-to-scanでの改善
+### obstacle_cloud_to_scanでの改善
 
 - 3D点群を使用して、ロボットの大きさに応じて衝突する可能性のある物体をスキャンに反映。
 - ロボットが登坂可能な角度の坂道は障害物として認識せず、通行可能と判断。
@@ -50,11 +50,11 @@ obstacle_cloud_to_scan/
 ```sh
 # リポジトリをクローン
 cd ~/ros2_ws/src
-git clone https://github.com/AbudoriLab-TC2024/obstacle-cloud-to-scan.git
+git clone https://github.com/AbudoriLab-TC2024/obstacle_cloud_to_scan.git
 
 # 依存パッケージをインストール
 sudo apt-get update
-sudo apt-get install libpcl-dev ros-<ros_distro>-pcl-ros ros-<ros_distro>-pointcloud-to-laserscan
+sudo apt-get install libpcl-dev ros-$ROS_DISTRO-pcl-ros ros-$ROS_DISTRO-pointcloud-to-laserscan
 
 # ビルド
 cd ~/ros2_ws
@@ -63,13 +63,13 @@ colcon build --packages-select obstacle_cloud_to_scan
 
 ## 使用方法
 
-obstacle-cloud-to-scanノードを起動します。このとき、pointcloud_to_laserscanも同時に起動します。
+obstacle_cloud_to_scanノードを起動します。このとき、pointcloud_to_laserscanも同時に起動します。
 
 ```sh
 ros2 launch obstacle_cloud_to_scan obstacle_cloud_to_scan.launch.py
 ```
 
-もし、obstacle-cloud-to-scanノード単体で起動したいときはは以下のコマンドを実行します。（pointcloud_to_laserscanを起動しない）
+もし、obstacle_cloud_to_scanノード単体で起動したいときはは以下のコマンドを実行します。（pointcloud_to_laserscanを起動しない）
 ```sh
 ros2 launch obstacle_cloud_to_scan filter_obstacle_cloud.launch.py
 ```
