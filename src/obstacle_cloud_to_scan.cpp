@@ -12,7 +12,7 @@
 #include "obstacle_cloud_to_scan/pcl_functions.hpp"
 
 #include <pcl/common/transforms.h>
-#include <tf2_eigen/tf2_eigen.h>
+#include <tf2_eigen/tf2_eigen.hpp>
 
 class ObstacleCloudToScanNode : public rclcpp::Node
 {
