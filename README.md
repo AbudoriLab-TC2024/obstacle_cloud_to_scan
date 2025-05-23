@@ -1,9 +1,9 @@
-# obstacle-cloud-to-scan
+# obstacle_cloud_to_scan
 3次元点群から障害物を検出し、scanトピックに変換してPublishするROS2パッケージです。
 
 ## 概要
 
-obstacle-cloud-to-scanは、LiDARセンサーからの3D点群データを処理し、ロボットにとって衝突したくない物体をLaserScanに反映し出力するROS2パッケージです。3D LiDARを使用することで、机のような細い足の障害物も適切に障害物として認識し、坂道は障害物として認識せず通行可能であると判断することができます。ナビゲーションやマッピングシステムに活用することができます。
+obstacle_cloud_to_scanは、LiDARセンサーからの3D点群データを処理し、ロボットにとって衝突したくない物体をLaserScanに反映し出力するROS2パッケージです。3D LiDARを使用することで、机のような細い足の障害物も適切に障害物として認識し、坂道は障害物として認識せず通行可能であると判断することができます。ナビゲーションやマッピングシステムに活用することができます。
 
 ![demo](https://github.com/user-attachments/assets/5d84b072-c780-40a0-92e0-30cc47587650)
 
@@ -23,7 +23,7 @@ obstacle-cloud-to-scanは、LiDARセンサーからの3D点群データを処理
 
 ## ディレクトリ構造
 ```
-obstacle-cloud-to-scan/
+obstacle_cloud_to_scan/
 ├── CMakeLists.txt
 ├── LICENSE
 ├── README.md
@@ -58,7 +58,7 @@ sudo apt-get install libpcl-dev ros-<ros_distro>-pcl-ros ros-<ros_distro>-pointc
 
 # ビルド
 cd ~/ros2_ws
-colcon build --packages-select obstacle-cloud-to-scan
+colcon build --packages-select obstacle_cloud_to_scan
 ```
 
 ## 使用方法
@@ -66,12 +66,12 @@ colcon build --packages-select obstacle-cloud-to-scan
 obstacle-cloud-to-scanノードを起動します。このとき、pointcloud_to_laserscanも同時に起動します。
 
 ```sh
-ros2 launch obstacle-cloud-to-scan obstacle_cloud_to_scan.launch.py
+ros2 launch obstacle_cloud_to_scan obstacle_cloud_to_scan.launch.py
 ```
 
 もし、obstacle-cloud-to-scanノード単体で起動したいときはは以下のコマンドを実行します。（pointcloud_to_laserscanを起動しない）
 ```sh
-ros2 launch obstacle-cloud-to-scan filter_obstacle_cloud.launch.py
+ros2 launch obstacle_cloud_to_scan filter_obstacle_cloud.launch.py
 ```
 
 ### パラメータ
