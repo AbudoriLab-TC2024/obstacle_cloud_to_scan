@@ -9,7 +9,6 @@
 #include <tf2_ros/buffer.h>
 #include <tf2_sensor_msgs/tf2_sensor_msgs.hpp>
 #include <geometry_msgs/msg/transform_stamped.hpp>
-#include <pointcloud_to_laserscan/pointcloud_to_laserscan_node.hpp>
 #include "obstacle_cloud_to_scan/pcl_functions.hpp"
 
 #include <pcl/common/transforms.h>

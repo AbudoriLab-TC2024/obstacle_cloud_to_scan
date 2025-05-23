@@ -54,8 +54,9 @@ install(TARGETS
   pcl_functions
   DESTINATION lib/${PROJECT_NAME})
 
-# configディレクトリとlaunchディレクトリのインストール
-install(DIRECTORY config
+# launchディレクトリのインストール
+install(DIRECTORY 
+  launch
   DESTINATION share/${PROJECT_NAME}/
 )
 
