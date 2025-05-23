@@ -17,6 +17,7 @@ def generate_launch_description():
             output='screen',
             # arguments=['--ros-args', '--log-level', 'debug'],
             parameters=[{
+                'target_frame': 'base_link',
                 'input_topic': '/livox/lidar',
                 'output_topic': '/filtered_point_cloud',
                 'laser_scan_topic': '/scan',

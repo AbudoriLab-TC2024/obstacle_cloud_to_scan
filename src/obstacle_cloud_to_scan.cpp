@@ -45,6 +45,7 @@ private:
     rclcpp::Subscription<sensor_msgs::msg::PointCloud2>::SharedPtr point_cloud_subscriber_;
     rclcpp::Publisher<sensor_msgs::msg::PointCloud2>::SharedPtr filtered_cloud_publisher_;
 
+    std::string target_frame_;
     std::string input_topic_;
     std::string output_topic_;
     double voxel_leaf_size_;
@@ -58,6 +59,7 @@ private:
 
     void declare_parameters()
     {
+        this->declare_parameter<std::string>("target_frame", "base_link");
         this->declare_parameter<std::string>("input_topic", "/input_cloud");
         this->declare_parameter<std::string>("output_topic", "/filtered_point_cloud");
         this->declare_parameter<std::string>("laser_scan_topic", "/scan");
@@ -72,6 +74,7 @@ private:
 
     void get_parameters()
     {
+        this->get_parameter("target_frame", target_frame_);
         this->get_parameter("input_topic", input_topic_);
         this->get_parameter("output_topic", output_topic_);
         this->get_parameter("voxel_leaf_size", voxel_leaf_size_);
@@ -81,6 +84,7 @@ private:
         this->get_parameter("use_gpu", use_gpu_);
 
         RCLCPP_INFO(this->get_logger(), "Parameters loaded:");
+        RCLCPP_INFO(this->get_logger(), "target_frame: %s", target_frame_.c_str());
         RCLCPP_INFO(this->get_logger(), "input_topic: %s", input_topic_.c_str());
         RCLCPP_INFO(this->get_logger(), "output_topic: %s", output_topic_.c_str());
         RCLCPP_INFO(this->get_logger(), "voxel_leaf_size: %f", voxel_leaf_size_);
@@ -100,7 +104,7 @@ private:
         try
         {
             transform_stamped 
-            = tf_buffer_->lookupTransform("base_link", msg->header.frame_id, tf2::TimePointZero);
+            = tf_buffer_->lookupTransform(target_frame_, msg->header.frame_id, tf2::TimePointZero);
         }
         catch (tf2::TransformException &ex)
         {
