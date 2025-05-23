@@ -80,13 +80,14 @@ obstacle_cloud_to_scan ノードのパラメータ
 
 | パラメータ名          | 型        | 説明                                               | デフォルト値    |
 |----------------------|-----------|----------------------------------------------------|-----------------|
+| `target_frame`      | `string`  | PointCloudのフレーム名、例えば、base_link->livox_frameなどのtfを読み込んでbase_link視点に回転移動してから処理します | `base_link`   |
 | `input_topic`        | `string`  | LiDARデータの入力トピック名                        | `/livox/lidar`  |
-| `output_topic`       | `string`  | フィルタリングされたPointCloudの出力トピック名    | `/cloud_in`     |
+| `output_topic`       | `string`  | フィルタリングされたPointCloudの出力トピック名。デフォルトはpointcloud_to_laserscanのinputトピック名にしてあります。   | `/cloud_in`     |
 | `voxel_leaf_size`    | `double`  | ボクセルフィルタの葉サイズ（メートル単位）          | `0.05`          |
-| `robot_box_size`     | `array`   | ロボット周囲のバウンディングボックスのサイズ（[x, y, z]） | `[0.9, 0.8, 1.0]` |
+| `robot_box_size`     | `array`   | ロボット周囲のバウンディングボックスのサイズ（[x, y, z]）、ロボット自身が点群に映り込むときはこのボックスを調整してください。 | `[0.9, 0.8, 1.0]` |
 | `robot_box_position` | `array`   | バウンディングボックスの位置（[x, y, z]）          | `[0.0, 0.0, 0.0]` |
 | `max_slope_angle`    | `double`  | 検出する最大傾斜角度（度単位）                      | `25.0`          |
-| `use_gpu`            | `bool`    | GPUを使用して処理を行うかどうか                      | `False`         |
+| `use_gpu`            | `bool`    | GPUを使用して処理を行うかどうか（現在は実装がありません。trueにしても変わりません。）                      | `False`         |
 
 
 pointcloud_to_laserscan ノードのパラメータ
