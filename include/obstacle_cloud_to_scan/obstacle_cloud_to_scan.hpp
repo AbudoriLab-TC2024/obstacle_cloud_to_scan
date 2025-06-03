@@ -10,6 +10,13 @@
 #include <pcl/filters/passthrough.h>
 #include <pcl/features/normal_3d.h>
 #include <pcl_conversions/pcl_conversions.h>
+#include <vector>
+#include <mutex>
+#include <rclcpp/time.hpp>
+#include <rclcpp/timer.hpp>
+#include <memory> // For std::shared_ptr
+#include <tf2_ros/buffer.h>
+#include <tf2_ros/transform_listener.h>
 
 class ObstacleCloudToScanNode : public rclcpp::Node
 {
@@ -24,6 +31,7 @@ private:
  //   pcl::PointCloud<pcl::Normal>::Ptr estimateNormals(const pcl::PointCloud<pcl::PointXYZ>::Ptr &cloud);
   //  pcl::PointCloud<pcl::PointXYZ>::Ptr filterObstacles(const pcl::PointCloud<pcl::PointXYZ>::Ptr &cloud, const pcl::PointCloud<pcl::Normal>::Ptr &normals);
     void publishLaserScan(const pcl::PointCloud<pcl::PointXYZ>::Ptr &points, const std_msgs::msg::Header &header);
+    void logPerformance();
   
   /*  
     pcl::PointCloud<pcl::PointXYZ>::Ptr downsamplePointCloud(
@@ -52,6 +60,12 @@ private:
     rclcpp::Publisher<sensor_msgs::msg::PointCloud2>::SharedPtr filtered_cloud_publisher_;
     rclcpp::Publisher<sensor_msgs::msg::LaserScan>::SharedPtr scan_publisher_;
 
+    // TF2 members
+    std::shared_ptr<tf2_ros::Buffer> tf_buffer_;
+    std::shared_ptr<tf2_ros::TransformListener> tf_listener_;
+
+    // Parameters
+    std::string target_frame_; // Added this as it was missing but used in cpp
     std::string input_topic_;
     std::string output_topic_;
     std::string laser_scan_topic_;
@@ -66,6 +80,12 @@ private:
     double scan_angle_max_;
     double scan_range_min_;
     double scan_range_max_;
+
+    std::vector<double> processing_times_;
+    std::vector<size_t> downsampled_points_counts_;
+    rclcpp::Time last_log_time_;
+    rclcpp::TimerBase::SharedPtr logging_timer_;
+    std::mutex data_mutex_;
 };
 
 #endif // OBSTACLE_CLOUD_TO_SCAN_NODE_HPP
