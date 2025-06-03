@@ -10,6 +10,10 @@
 #include <pcl/filters/passthrough.h>
 #include <pcl/features/normal_3d.h>
 #include <pcl_conversions/pcl_conversions.h>
+#include <vector>
+#include <mutex>
+#include <rclcpp/time.hpp>
+#include <rclcpp/timer.hpp>
 
 class ObstacleCloudToScanNode : public rclcpp::Node
 {
@@ -24,6 +28,7 @@ private:
  //   pcl::PointCloud<pcl::Normal>::Ptr estimateNormals(const pcl::PointCloud<pcl::PointXYZ>::Ptr &cloud);
   //  pcl::PointCloud<pcl::PointXYZ>::Ptr filterObstacles(const pcl::PointCloud<pcl::PointXYZ>::Ptr &cloud, const pcl::PointCloud<pcl::Normal>::Ptr &normals);
     void publishLaserScan(const pcl::PointCloud<pcl::PointXYZ>::Ptr &points, const std_msgs::msg::Header &header);
+    void logPerformance();
   
   /*  
     pcl::PointCloud<pcl::PointXYZ>::Ptr downsamplePointCloud(
@@ -66,6 +71,12 @@ private:
     double scan_angle_max_;
     double scan_range_min_;
     double scan_range_max_;
+
+    std::vector<double> processing_times_;
+    std::vector<size_t> downsampled_points_counts_;
+    rclcpp::Time last_log_time_;
+    rclcpp::TimerBase::SharedPtr logging_timer_;
+    std::mutex data_mutex_;
 };
 
 #endif // OBSTACLE_CLOUD_TO_SCAN_NODE_HPP

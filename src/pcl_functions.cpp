@@ -6,7 +6,6 @@ pcl::PointCloud<pcl::PointXYZ>::Ptr downsamplePointCloud(
     bool use_gpu,
     rclcpp::Logger logger)
 {
-    auto start_time = std::chrono::high_resolution_clock::now(); // 計測開始
     pcl::PointCloud<pcl::PointXYZ>::Ptr downsampled_cloud(new pcl::PointCloud<pcl::PointXYZ>);
     pcl::VoxelGrid<pcl::PointXYZ> voxel_filter;
     voxel_filter.setInputCloud(cloud);
@@ -23,10 +22,6 @@ pcl::PointCloud<pcl::PointXYZ>::Ptr downsamplePointCloud(
         voxel_filter.filter(*downsampled_cloud);
     }
 
-    auto end_time = std::chrono::high_resolution_clock::now(); // 計測終了
-    std::chrono::duration<double, std::milli> elapsed = end_time - start_time;
-    //RCLCPP_INFO(logger, "downsamplePointCloud took %.2f ms", elapsed.count());
-
     return downsampled_cloud;
 }
 
@@ -35,8 +30,6 @@ pcl::PointCloud<pcl::PointXYZ>::Ptr applyPassThroughFilter(
     const std::vector<double> &robot_box_size,
     rclcpp::Logger logger)
 {
-    auto start_time = std::chrono::high_resolution_clock::now(); // 計測開始
-
     pcl::PointCloud<pcl::PointXYZ>::Ptr filtered_cloud(new pcl::PointCloud<pcl::PointXYZ>);
     pcl::PassThrough<pcl::PointXYZ> pass;
     pass.setInputCloud(cloud);
@@ -45,10 +38,6 @@ pcl::PointCloud<pcl::PointXYZ>::Ptr applyPassThroughFilter(
     pass.filter(*filtered_cloud);
     RCLCPP_DEBUG(logger, "Passthrough filter applied");
 
-    auto end_time = std::chrono::high_resolution_clock::now(); // 計測終了
-    std::chrono::duration<double, std::milli> elapsed = end_time - start_time;
-    //RCLCPP_INFO(logger, "applyPassThroughFilter took %.2f ms", elapsed.count());
-
     return filtered_cloud;
 }
 
@@ -56,8 +45,6 @@ pcl::PointCloud<pcl::Normal>::Ptr estimateNormals(
     const pcl::PointCloud<pcl::PointXYZ>::Ptr &cloud,
     rclcpp::Logger logger)
 {
-    auto start_time = std::chrono::high_resolution_clock::now(); // 計測開始
-
     pcl::PointCloud<pcl::Normal>::Ptr normals(new pcl::PointCloud<pcl::Normal>);
     pcl::NormalEstimation<pcl::PointXYZ, pcl::Normal> normal_estimation;
     normal_estimation.setInputCloud(cloud);
@@ -66,10 +53,6 @@ pcl::PointCloud<pcl::Normal>::Ptr estimateNormals(
     normal_estimation.setRadiusSearch(0.6);
     normal_estimation.compute(*normals);
     RCLCPP_DEBUG(logger, "Normal estimation completed");
-
-    auto end_time = std::chrono::high_resolution_clock::now(); // 計測終了
-    std::chrono::duration<double, std::milli> elapsed = end_time - start_time;
-    //RCLCPP_INFO(logger, "estimateNormals took %.2f ms", elapsed.count());
 
     return normals;
 }
@@ -80,8 +63,6 @@ pcl::PointCloud<pcl::PointXYZ>::Ptr filterObstacles(
     double max_slope_angle,
     rclcpp::Logger logger)
 {
-    auto start_time = std::chrono::high_resolution_clock::now(); // 計測開始
-
     RCLCPP_DEBUG(logger, "Normal cloud size: %ld", cloud->points.size());
     RCLCPP_DEBUG(logger, "Max angle slope: %f", max_slope_angle);
     pcl::PointCloud<pcl::PointXYZ>::Ptr filtered_cloud(new pcl::PointCloud<pcl::PointXYZ>);
@@ -100,10 +81,6 @@ pcl::PointCloud<pcl::PointXYZ>::Ptr filterObstacles(
     }
     RCLCPP_DEBUG(logger, "Obstacle filtering completed");
 
-    auto end_time = std::chrono::high_resolution_clock::now(); // 計測終了
-    std::chrono::duration<double, std::milli> elapsed = end_time - start_time;
-//    RCLCPP_INFO(logger, "filterObstacles took %.2f ms", elapsed.count());
-
     return filtered_cloud;
 }
 
@@ -113,8 +90,6 @@ pcl::PointCloud<pcl::PointXYZ>::Ptr removeRobotBody(
     const std::vector<double> &box_size,
     rclcpp::Logger logger)
 {
-    auto start_time = std::chrono::high_resolution_clock::now(); // 計測開始
-
     pcl::CropBox<pcl::PointXYZ> crop_box_filter;
     crop_box_filter.setInputCloud(cloud);
 
@@ -136,10 +111,6 @@ pcl::PointCloud<pcl::PointXYZ>::Ptr removeRobotBody(
     crop_box_filter.filter(*filtered_cloud);
 
     RCLCPP_DEBUG(logger, "Removed points within the robot body bounding box.");
-
-    auto end_time = std::chrono::high_resolution_clock::now(); // 計測終了
-    std::chrono::duration<double, std::milli> elapsed = end_time - start_time;
-    //RCLCPP_INFO(logger, "removeRobotBody took %.2f ms", elapsed.count());
 
     return filtered_cloud;
 }

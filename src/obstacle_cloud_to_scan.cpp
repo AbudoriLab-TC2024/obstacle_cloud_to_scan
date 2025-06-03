@@ -14,12 +14,22 @@
 #include <pcl/common/transforms.h>
 #include <tf2_eigen/tf2_eigen.hpp>
 
-class ObstacleCloudToScanNode : public rclcpp::Node
-{
-public:
-    ObstacleCloudToScanNode() : Node("obstacle_cloud_to_scan")
+#include <chrono>
+#include <numeric>
+#include <functional>
+#include "obstacle_cloud_to_scan/obstacle_cloud_to_scan.hpp" // Make sure this is included
+
+// class ObstacleCloudToScanNode : public rclcpp::Node // This class is now defined in the .hpp
+// { // public: // All member function definitions should be outside if the class is in .hpp
+
+    ObstacleCloudToScanNode::ObstacleCloudToScanNode() : Node("obstacle_cloud_to_scan")
     {
         RCLCPP_DEBUG(this->get_logger(), "Initializing ObstacleCloudToScanNode");
+
+        last_log_time_ = this->get_clock()->now();
+        logging_timer_ = this->create_wall_timer(
+            std::chrono::seconds(1),
+            std::bind(&ObstacleCloudToScanNode::logPerformance, this));
 
         tf_buffer_ = std::make_shared<tf2_ros::Buffer>(this->get_clock());
         tf_listener_ = std::make_shared<tf2_ros::TransformListener>(*tf_buffer_);
@@ -40,24 +50,31 @@ public:
         RCLCPP_DEBUG(this->get_logger(), "Publisher created for topic: %s", output_topic_.c_str());
     }
 
-private:
+// private: // Member variables are now in the .hpp file
 
-    rclcpp::Subscription<sensor_msgs::msg::PointCloud2>::SharedPtr point_cloud_subscriber_;
-    rclcpp::Publisher<sensor_msgs::msg::PointCloud2>::SharedPtr filtered_cloud_publisher_;
+    // rclcpp::Subscription<sensor_msgs::msg::PointCloud2>::SharedPtr point_cloud_subscriber_;
+    // rclcpp::Publisher<sensor_msgs::msg::PointCloud2>::SharedPtr filtered_cloud_publisher_;
 
-    std::string target_frame_;
-    std::string input_topic_;
-    std::string output_topic_;
-    double voxel_leaf_size_;
-    std::vector<double> robot_box_size_;
-    std::vector<double> robot_box_position_;
-    double max_slope_angle_;
-    bool use_gpu_;
+    // std::string target_frame_;
+    // std::string input_topic_;
+    // std::string output_topic_;
+    // double voxel_leaf_size_;
+    // std::vector<double> robot_box_size_;
+    // std::vector<double> robot_box_position_;
+    // double max_slope_angle_;
+    // bool use_gpu_;
 
-    std::shared_ptr<tf2_ros::Buffer> tf_buffer_;
-    std::shared_ptr<tf2_ros::TransformListener> tf_listener_;
+    // std::shared_ptr<tf2_ros::Buffer> tf_buffer_;
+    // std::shared_ptr<tf2_ros::TransformListener> tf_listener_;
+    // Member variables related to logging are in the hpp
+    // std::vector<double> processing_times_;
+    // std::vector<size_t> downsampled_points_counts_;
+    // rclcpp::Time last_log_time_;
+    // rclcpp::TimerBase::SharedPtr logging_timer_;
+    // std::mutex data_mutex_;
 
-    void declare_parameters()
+
+    void ObstacleCloudToScanNode::declare_parameters()
     {
         this->declare_parameter<std::string>("target_frame", "base_link");
         this->declare_parameter<std::string>("input_topic", "/input_cloud");
@@ -92,9 +109,9 @@ private:
         RCLCPP_INFO(this->get_logger(), "use_gpu: %s", use_gpu_ ? "true" : "false");
     }
 
-    void pointCloudCallback(const sensor_msgs::msg::PointCloud2::SharedPtr msg)
+    void ObstacleCloudToScanNode::pointCloudCallback(const sensor_msgs::msg::PointCloud2::SharedPtr msg)
     {
-        auto callback_start_time = std::chrono::high_resolution_clock::now(); // 計測開始
+        auto callback_start_time = std::chrono::high_resolution_clock::now();
         RCLCPP_DEBUG(this->get_logger(), "Received point cloud message");
 
         // 指定のTFフレームに転写
@@ -144,9 +161,9 @@ private:
         */
 
         auto tf_transforme_end_time = std::chrono::high_resolution_clock::now(); // 計測終了
-        std::chrono::duration<double, std::milli> tf_transforme_elapsed 
-                        = tf_transforme_end_time - callback_start_time;
-        RCLCPP_INFO(this->get_logger(), "tf fransforme took %.2f ms", tf_transforme_elapsed.count());
+        // std::chrono::duration<double, std::milli> tf_transforme_elapsed
+        //                 = tf_transforme_end_time - callback_start_time;
+        // RCLCPP_INFO(this->get_logger(), "tf fransforme took %.2f ms", tf_transforme_elapsed.count());
 
 /*
         pcl::PointCloud<pcl::PointXYZ>::Ptr cloud(new pcl::PointCloud<pcl::PointXYZ>);
@@ -163,12 +180,13 @@ private:
         RCLCPP_DEBUG(this->get_logger(), "Starting downsampling");
         pcl::PointCloud<pcl::PointXYZ>::Ptr downsampled_cloud 
             = downsamplePointCloud(transformed_cloud, voxel_leaf_size_, use_gpu_, this->get_logger());
+        size_t num_downsampled_points = downsampled_cloud->points.size(); // Added
         RCLCPP_DEBUG(this->get_logger(), "Downsampling completed");
 
-        auto downsampling_end_time = std::chrono::high_resolution_clock::now(); // 計測終了
-        std::chrono::duration<double, std::milli> downsampling_elapsed 
-                        = downsampling_end_time - callback_start_time;
-        RCLCPP_INFO(this->get_logger(), "downsampling took %.2f ms", downsampling_elapsed.count());
+        // auto downsampling_end_time = std::chrono::high_resolution_clock::now(); // 計測終了
+        // std::chrono::duration<double, std::milli> downsampling_elapsed
+        //                 = downsampling_end_time - callback_start_time;
+        // RCLCPP_INFO(this->get_logger(), "downsampling took %.2f ms", downsampling_elapsed.count());
 
         // パススルーフィルタの適用
         RCLCPP_DEBUG(this->get_logger(), "Starting passthrough filter");
@@ -176,10 +194,10 @@ private:
             = applyPassThroughFilter(downsampled_cloud, robot_box_size_, this->get_logger());
         RCLCPP_DEBUG(this->get_logger(), "Passthrough filter completed");
         
-        auto passthrough_end_time = std::chrono::high_resolution_clock::now(); // 計測終了
-        std::chrono::duration<double, std::milli> passthrough_elapsed 
-                        = passthrough_end_time - callback_start_time;
-        RCLCPP_INFO(this->get_logger(), "passthrough took %.2f ms", passthrough_elapsed.count());
+        // auto passthrough_end_time = std::chrono::high_resolution_clock::now(); // 計測終了
+        // std::chrono::duration<double, std::milli> passthrough_elapsed
+        //                 = passthrough_end_time - callback_start_time;
+        // RCLCPP_INFO(this->get_logger(), "passthrough took %.2f ms", passthrough_elapsed.count());
 
 
         // ロボットの体の除去
@@ -188,20 +206,20 @@ private:
             = removeRobotBody(passthrough_cloud, robot_box_position_, robot_box_size_, this->get_logger());
         RCLCPP_DEBUG(this->get_logger(), "Robot body removal completed");
 
-        auto removeRobotBody_end_time = std::chrono::high_resolution_clock::now(); // 計測終了
-        std::chrono::duration<double, std::milli> removeRobotBody_elapsed 
-                        = removeRobotBody_end_time - callback_start_time;
-        RCLCPP_INFO(this->get_logger(), "removeRobotBody took %.2f ms", removeRobotBody_elapsed.count());
+        // auto removeRobotBody_end_time = std::chrono::high_resolution_clock::now(); // 計測終了
+        // std::chrono::duration<double, std::milli> removeRobotBody_elapsed
+        //                 = removeRobotBody_end_time - callback_start_time;
+        // RCLCPP_INFO(this->get_logger(), "removeRobotBody took %.2f ms", removeRobotBody_elapsed.count());
 
         // 法線推定と傾斜の判定
         RCLCPP_DEBUG(this->get_logger(), "Starting normal estimation");
         pcl::PointCloud<pcl::Normal>::Ptr normals = estimateNormals(body_removed_cloud, this->get_logger());
         RCLCPP_DEBUG(this->get_logger(), "Normal estimation completed");
 
-        auto normals_end_time = std::chrono::high_resolution_clock::now(); // 計測終了
-        std::chrono::duration<double, std::milli> normals_elapsed 
-                        = normals_end_time - callback_start_time;
-        RCLCPP_INFO(this->get_logger(), "normals took %.2f ms", normals_elapsed.count());
+        // auto normals_end_time = std::chrono::high_resolution_clock::now(); // 計測終了
+        // std::chrono::duration<double, std::milli> normals_elapsed
+        //                 = normals_end_time - callback_start_time;
+        // RCLCPP_INFO(this->get_logger(), "normals took %.2f ms", normals_elapsed.count());
 
         // 法線から不要な点群を除去
         RCLCPP_DEBUG(this->get_logger(), "Starting obstacle filtering");
@@ -209,10 +227,10 @@ private:
             = filterObstacles(body_removed_cloud, normals, max_slope_angle_, this->get_logger());
         RCLCPP_DEBUG(this->get_logger(), "Obstacle filtering completed");
 
-        auto filterObstacles_end_time = std::chrono::high_resolution_clock::now(); // 計測終了
-        std::chrono::duration<double, std::milli> filterObstacles_elapsed 
-                        = filterObstacles_end_time - callback_start_time;
-        RCLCPP_INFO(this->get_logger(), "filterObstacles took %.2f ms", filterObstacles_elapsed.count());
+        // auto filterObstacles_end_time = std::chrono::high_resolution_clock::now(); // 計測終了
+        // std::chrono::duration<double, std::milli> filterObstacles_elapsed
+        //                 = filterObstacles_end_time - callback_start_time;
+        // RCLCPP_INFO(this->get_logger(), "filterObstacles took %.2f ms", filterObstacles_elapsed.count());
 
 
         // フィルタリング後の点群をパブリッシュ
@@ -220,22 +238,50 @@ private:
         sensor_msgs::msg::PointCloud2 filtered_msg;
         pcl::toROSMsg(*filtered_cloud, filtered_msg);
 
-        filtered_msg.header.frame_id = "base_link";
+        filtered_msg.header.frame_id = "base_link"; // Should be target_frame_
         filtered_msg.header.stamp = this->get_clock()->now();
         filtered_cloud_publisher_->publish(filtered_msg);
         
-        auto callback_end_time = std::chrono::high_resolution_clock::now(); // 計測終了
-        std::chrono::duration<double, std::milli> callback_elapsed 
-                        = callback_end_time - callback_start_time;
-        RCLCPP_INFO(this->get_logger(), "publish took %.2f ms", callback_elapsed.count());
-    }
-};
+        auto callback_end_time = std::chrono::high_resolution_clock::now();
+        double total_processing_time_ms = std::chrono::duration<double, std::milli>(callback_end_time - callback_start_time).count();
 
-int main(int argc, char **argv)
+        { // Scope for lock guard
+            std::lock_guard<std::mutex> lock(data_mutex_);
+            processing_times_.push_back(total_processing_time_ms);
+            downsampled_points_counts_.push_back(num_downsampled_points);
+        }
+        // RCLCPP_INFO(this->get_logger(), "publish took %.2f ms", callback_elapsed.count()); // Removed
+        RCLCPP_DEBUG(this->get_logger(), "PointCloud callback finished processing."); // Added for clarity
+    }
+
+// }; // This closes the class definition if it were here. Now it's in .hpp
+
+void ObstacleCloudToScanNode::logPerformance()
 {
-    rclcpp::init(argc, argv);
-    rclcpp::spin(std::make_shared<ObstacleCloudToScanNode>());
-    rclcpp::shutdown();
-    return 0;
+    std::lock_guard<std::mutex> lock(data_mutex_);
+
+    if (processing_times_.empty() || downsampled_points_counts_.empty())
+    {
+        return; // Nothing to log
+    }
+
+    double sum_processing_time = 0.0;
+    for (double time : processing_times_) {
+        sum_processing_time += time;
+    }
+    double avg_processing_time = sum_processing_time / processing_times_.size();
+
+    size_t sum_points = 0;
+    for (size_t count : downsampled_points_counts_) {
+        sum_points += count;
+    }
+    double avg_downsampled_points = static_cast<double>(sum_points) / downsampled_points_counts_.size();
+
+    RCLCPP_INFO(this->get_logger(), "Avg Process Time (last 1s): %.3f ms", avg_processing_time);
+    RCLCPP_INFO(this->get_logger(), "Avg Downsampled Points (last 1s): %.0f", avg_downsampled_points);
+
+    processing_times_.clear();
+    downsampled_points_counts_.clear();
+    last_log_time_ = this->get_clock()->now(); // Update last log time
 }
 
