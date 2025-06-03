@@ -257,3 +257,10 @@ void ObstacleCloudToScanNode::logPerformance()
     last_log_time_ = this->get_clock()->now(); // Update last log time
 }
 
+int main(int argc, char **argv)
+{
+    rclcpp::init(argc, argv);
+    rclcpp::spin(std::make_shared<ObstacleCloudToScanNode>());
+    rclcpp::shutdown();
+    return 0;
+}
