@@ -29,11 +29,11 @@ def generate_launch_description():
                 'max_slope_angle': 20.0,
                 'use_gpu': False,
                 'use_pmf_filter': True,
-                'pmf_max_window_size': 33,
+                'pmf_max_window_size': 5,
                 'pmf_slope': 1.0,
-                'pmf_initial_distance': 0.15,
-                'pmf_max_distance': 3.0,
-                'pmf_cell_size': 0.5
+                'pmf_initial_distance': 0.05,
+                'pmf_max_distance': 1.0,
+                'pmf_cell_size': 0.25
             }],
             remappings=[
                 ('input_topic', '/livox_cloud_in'),

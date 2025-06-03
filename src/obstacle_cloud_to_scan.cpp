@@ -36,7 +36,7 @@
         get_parameters();
 
         point_cloud_subscriber_ = this->create_subscription<sensor_msgs::msg::PointCloud2>(
-            input_topic_, 10, std::bind(&ObstacleCloudToScanNode::pointCloudCallback, this, std::placeholders::_1));
+            input_topic_, 1, std::bind(&ObstacleCloudToScanNode::pointCloudCallback, this, std::placeholders::_1));
         RCLCPP_DEBUG(this->get_logger(), "Subscribed to topic: %s", input_topic_.c_str());
 
         auto reliable_qos = rclcpp::QoS(rclcpp::KeepLast(5)).reliable();
