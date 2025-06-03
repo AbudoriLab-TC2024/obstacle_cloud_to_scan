@@ -17,10 +17,8 @@
 #include <chrono>
 #include <numeric>
 #include <functional>
-#include "obstacle_cloud_to_scan/obstacle_cloud_to_scan.hpp" // Make sure this is included
+#include "obstacle_cloud_to_scan/obstacle_cloud_to_scan.hpp"
 
-// class ObstacleCloudToScanNode : public rclcpp::Node // This class is now defined in the .hpp
-// { // public: // All member function definitions should be outside if the class is in .hpp
 
     ObstacleCloudToScanNode::ObstacleCloudToScanNode() : Node("obstacle_cloud_to_scan")
     {
@@ -50,30 +48,6 @@
         RCLCPP_DEBUG(this->get_logger(), "Publisher created for topic: %s", output_topic_.c_str());
     }
 
-// private: // Member variables are now in the .hpp file
-
-    // rclcpp::Subscription<sensor_msgs::msg::PointCloud2>::SharedPtr point_cloud_subscriber_;
-    // rclcpp::Publisher<sensor_msgs::msg::PointCloud2>::SharedPtr filtered_cloud_publisher_;
-
-    // std::string target_frame_;
-    // std::string input_topic_;
-    // std::string output_topic_;
-    // double voxel_leaf_size_;
-    // std::vector<double> robot_box_size_;
-    // std::vector<double> robot_box_position_;
-    // double max_slope_angle_;
-    // bool use_gpu_;
-
-    // std::shared_ptr<tf2_ros::Buffer> tf_buffer_;
-    // std::shared_ptr<tf2_ros::TransformListener> tf_listener_;
-    // Member variables related to logging are in the hpp
-    // std::vector<double> processing_times_;
-    // std::vector<size_t> downsampled_points_counts_;
-    // rclcpp::Time last_log_time_;
-    // rclcpp::TimerBase::SharedPtr logging_timer_;
-    // std::mutex data_mutex_;
-
-
     void ObstacleCloudToScanNode::declare_parameters()
     {
         this->declare_parameter<std::string>("target_frame", "base_link");
@@ -89,7 +63,7 @@
 
     }
 
-    void get_parameters()
+    void ObstacleCloudToScanNode::get_parameters()
     {
         this->get_parameter("target_frame", target_frame_);
         this->get_parameter("input_topic", input_topic_);
@@ -253,8 +227,6 @@
         // RCLCPP_INFO(this->get_logger(), "publish took %.2f ms", callback_elapsed.count()); // Removed
         RCLCPP_DEBUG(this->get_logger(), "PointCloud callback finished processing."); // Added for clarity
     }
-
-// }; // This closes the class definition if it were here. Now it's in .hpp
 
 void ObstacleCloudToScanNode::logPerformance()
 {

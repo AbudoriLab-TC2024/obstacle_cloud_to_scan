@@ -14,6 +14,9 @@
 #include <mutex>
 #include <rclcpp/time.hpp>
 #include <rclcpp/timer.hpp>
+#include <memory> // For std::shared_ptr
+#include <tf2_ros/buffer.h>
+#include <tf2_ros/transform_listener.h>
 
 class ObstacleCloudToScanNode : public rclcpp::Node
 {
@@ -57,6 +60,12 @@ private:
     rclcpp::Publisher<sensor_msgs::msg::PointCloud2>::SharedPtr filtered_cloud_publisher_;
     rclcpp::Publisher<sensor_msgs::msg::LaserScan>::SharedPtr scan_publisher_;
 
+    // TF2 members
+    std::shared_ptr<tf2_ros::Buffer> tf_buffer_;
+    std::shared_ptr<tf2_ros::TransformListener> tf_listener_;
+
+    // Parameters
+    std::string target_frame_; // Added this as it was missing but used in cpp
     std::string input_topic_;
     std::string output_topic_;
     std::string laser_scan_topic_;
