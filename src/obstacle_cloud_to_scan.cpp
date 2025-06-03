@@ -56,6 +56,12 @@
         this->declare_parameter<std::vector<double>>("robot_box_position", {0.0, 0.0, 0.0});
         this->declare_parameter<double>("max_slope_angle", 5.0);
         this->declare_parameter<bool>("use_gpu", false);
+        this->declare_parameter<bool>("use_pmf_filter", true);
+        this->declare_parameter<int>("pmf_max_window_size", 33);
+        this->declare_parameter<double>("pmf_slope", 1.0);
+        this->declare_parameter<double>("pmf_initial_distance", 0.15);
+        this->declare_parameter<double>("pmf_max_distance", 3.0);
+        this->declare_parameter<double>("pmf_cell_size", 0.5);
 
     }
 
@@ -69,6 +75,12 @@
         this->get_parameter("robot_box_position", robot_box_position_);
         this->get_parameter("max_slope_angle", max_slope_angle_);
         this->get_parameter("use_gpu", use_gpu_);
+        this->get_parameter("use_pmf_filter", use_pmf_filter_);
+        this->get_parameter("pmf_max_window_size", pmf_max_window_size_);
+        this->get_parameter("pmf_slope", pmf_slope_);
+        this->get_parameter("pmf_initial_distance", pmf_initial_distance_);
+        this->get_parameter("pmf_max_distance", pmf_max_distance_);
+        this->get_parameter("pmf_cell_size", pmf_cell_size_);
 
         RCLCPP_INFO(this->get_logger(), "Parameters loaded:");
         RCLCPP_INFO(this->get_logger(), "target_frame: %s", target_frame_.c_str());
@@ -77,6 +89,12 @@
         RCLCPP_INFO(this->get_logger(), "voxel_leaf_size: %f", voxel_leaf_size_);
         RCLCPP_INFO(this->get_logger(), "max_slope_angle: %f", max_slope_angle_);
         RCLCPP_INFO(this->get_logger(), "use_gpu: %s", use_gpu_ ? "true" : "false");
+        RCLCPP_INFO(this->get_logger(), "use_pmf_filter: %s", use_pmf_filter_ ? "true" : "false");
+        RCLCPP_INFO(this->get_logger(), "pmf_max_window_size: %d", pmf_max_window_size_);
+        RCLCPP_INFO(this->get_logger(), "pmf_slope: %f", pmf_slope_);
+        RCLCPP_INFO(this->get_logger(), "pmf_initial_distance: %f", pmf_initial_distance_);
+        RCLCPP_INFO(this->get_logger(), "pmf_max_distance: %f", pmf_max_distance_);
+        RCLCPP_INFO(this->get_logger(), "pmf_cell_size: %f", pmf_cell_size_);
     }
 
     void ObstacleCloudToScanNode::pointCloudCallback(const sensor_msgs::msg::PointCloud2::SharedPtr msg)
@@ -124,16 +142,29 @@
             = removeRobotBody(passthrough_cloud, robot_box_position_, robot_box_size_, this->get_logger());
         RCLCPP_DEBUG(this->get_logger(), "Robot body removal completed");
 
-        // 法線推定と傾斜の判定
-        RCLCPP_DEBUG(this->get_logger(), "Starting normal estimation");
-        pcl::PointCloud<pcl::Normal>::Ptr normals = estimateNormals(body_removed_cloud, this->get_logger());
-        RCLCPP_DEBUG(this->get_logger(), "Normal estimation completed");
+        pcl::PointCloud<pcl::PointXYZ>::Ptr filtered_cloud(new pcl::PointCloud<pcl::PointXYZ>);
 
-        // 法線から不要な点群を除去
-        RCLCPP_DEBUG(this->get_logger(), "Starting obstacle filtering");
-        pcl::PointCloud<pcl::PointXYZ>::Ptr filtered_cloud 
-            = filterObstacles(body_removed_cloud, normals, max_slope_angle_, this->get_logger());
-        RCLCPP_DEBUG(this->get_logger(), "Obstacle filtering completed");
+        if (use_pmf_filter_) {
+            RCLCPP_DEBUG(this->get_logger(), "Using PMF filter for ground segmentation.");
+            filtered_cloud = applyProgressiveMorphologicalFilter(
+                body_removed_cloud,
+                this->get_logger(),
+                pmf_max_window_size_,
+                pmf_slope_,
+                pmf_initial_distance_,
+                pmf_max_distance_,
+                pmf_cell_size_);
+            RCLCPP_DEBUG(this->get_logger(), "PMF filtering returned. Number of obstacle points: %zu", filtered_cloud ? filtered_cloud->size() : 0);
+        } else {
+            RCLCPP_DEBUG(this->get_logger(), "Using original normal-based filter for ground segmentation.");
+            RCLCPP_DEBUG(this->get_logger(), "Starting normal estimation (original method)");
+            pcl::PointCloud<pcl::Normal>::Ptr normals = estimateNormals(body_removed_cloud, this->get_logger());
+            RCLCPP_DEBUG(this->get_logger(), "Normal estimation completed (original method)");
+
+            RCLCPP_DEBUG(this->get_logger(), "Starting obstacle filtering (original method)");
+            filtered_cloud = filterObstacles(body_removed_cloud, normals, max_slope_angle_, this->get_logger());
+            RCLCPP_DEBUG(this->get_logger(), "Obstacle filtering completed (original method). Number of obstacle points: %zu", filtered_cloud ? filtered_cloud->size() : 0);
+        }
 
         // フィルタリング後の点群をパブリッシュ
         RCLCPP_DEBUG(this->get_logger(), "Publishing filtered point cloud");
