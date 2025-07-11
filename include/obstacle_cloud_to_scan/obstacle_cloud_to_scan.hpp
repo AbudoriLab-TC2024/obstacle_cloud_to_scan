@@ -10,6 +10,7 @@
 #include <pcl/filters/passthrough.h>
 #include <pcl/features/normal_3d.h>
 #include <pcl_conversions/pcl_conversions.h>
+#include <pcl/segmentation/progressive_morphological_filter.h>
 #include <vector>
 #include <mutex>
 #include <rclcpp/time.hpp>
@@ -45,15 +46,15 @@ private:
     const std::vector<double> &robot_box_size,
     rclcpp::Logger logger);
     
-    pcl::PointCloud<pcl::Normal>::Ptr estimateNormals(
-    const pcl::PointCloud<pcl::PointXYZ>::Ptr &cloud,
-    rclcpp::Logger logger);
-    
-    pcl::PointCloud<pcl::PointXYZ>::Ptr filterObstacles(
-    const pcl::PointCloud<pcl::PointXYZ>::Ptr &cloud,
-    const pcl::PointCloud<pcl::Normal>::Ptr &normals,
-    double max_slope_angle,
-    rclcpp::Logger logger);
+//    pcl::PointCloud<pcl::Normal>::Ptr estimateNormals(
+//    const pcl::PointCloud<pcl::PointXYZ>::Ptr &cloud,
+//    rclcpp::Logger logger);
+//
+//    pcl::PointCloud<pcl::PointXYZ>::Ptr filterObstacles(
+//    const pcl::PointCloud<pcl::PointXYZ>::Ptr &cloud,
+//    const pcl::PointCloud<pcl::Normal>::Ptr &normals,
+//    double max_slope_angle,
+//    rclcpp::Logger logger);
     */
 
     rclcpp::Subscription<sensor_msgs::msg::PointCloud2>::SharedPtr point_cloud_subscriber_;
@@ -80,6 +81,14 @@ private:
     double scan_angle_max_;
     double scan_range_min_;
     double scan_range_max_;
+
+    // PMF Parameters
+    bool use_pmf_filter_;
+    int pmf_max_window_size_;
+    double pmf_slope_;
+    double pmf_initial_distance_;
+    double pmf_max_distance_;
+    double pmf_cell_size_;
 
     std::vector<double> processing_times_;
     std::vector<size_t> downsampled_points_counts_;

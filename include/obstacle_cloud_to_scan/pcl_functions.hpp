@@ -40,4 +40,14 @@ pcl::PointCloud<pcl::PointXYZ>::Ptr removeRobotBody(
     const std::vector<double> &box_min,
     const std::vector<double> &box_max,
     rclcpp::Logger logger);
+
+// PMFによる地面除去
+pcl::PointCloud<pcl::PointXYZ>::Ptr applyProgressiveMorphologicalFilter(
+    const pcl::PointCloud<pcl::PointXYZ>::Ptr &cloud,
+    rclcpp::Logger logger,
+    int max_window_size,
+    double slope,             // Changed from float to double for consistency
+    double initial_distance,  // Changed from float to double
+    double max_distance,      // Changed from float to double
+    double cell_size);        // Changed from float to double
 #endif // PCL_PROCESSING_FUNCTIONS_H

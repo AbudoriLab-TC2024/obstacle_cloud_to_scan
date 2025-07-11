@@ -27,7 +27,13 @@ def generate_launch_description():
                 'robot_box_size': [0.9, 0.8, 1.0],
                 'robot_box_position': [0.0, 0.0, 0.0],
                 'max_slope_angle': 20.0,
-                'use_gpu': False
+                'use_gpu': False,
+                'use_pmf_filter': True,
+                'pmf_max_window_size': 5,
+                'pmf_slope': 1.0,
+                'pmf_initial_distance': 0.05,
+                'pmf_max_distance': 1.0,
+                'pmf_cell_size': 0.25
             }],
             remappings=[
                 ('input_topic', '/livox_cloud_in'),

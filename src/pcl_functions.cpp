@@ -1,4 +1,6 @@
 #include "obstacle_cloud_to_scan/pcl_functions.hpp"
+#include <pcl/segmentation/progressive_morphological_filter.h>
+#include <pcl/filters/extract_indices.h>
 
 pcl::PointCloud<pcl::PointXYZ>::Ptr downsamplePointCloud(
     const pcl::PointCloud<pcl::PointXYZ>::Ptr &cloud,
@@ -38,6 +40,51 @@ pcl::PointCloud<pcl::PointXYZ>::Ptr applyPassThroughFilter(
     pass.filter(*filtered_cloud);
     RCLCPP_DEBUG(logger, "Passthrough filter applied");
 
+    return filtered_cloud;
+}
+
+pcl::PointCloud<pcl::PointXYZ>::Ptr applyProgressiveMorphologicalFilter(
+    const pcl::PointCloud<pcl::PointXYZ>::Ptr &cloud,
+    rclcpp::Logger logger,
+    int max_window_size,
+    double slope,
+    double initial_distance,
+    double max_distance,
+    double cell_size)
+{
+    RCLCPP_DEBUG(logger, "Starting PMF ground filtering (in pcl_functions)");
+    pcl::PointCloud<pcl::PointXYZ>::Ptr filtered_cloud(new pcl::PointCloud<pcl::PointXYZ>);
+
+    if (cloud->empty()) {
+        RCLCPP_WARN(logger, "Input cloud to PMF is empty.");
+        return filtered_cloud;
+    }
+
+    pcl::ProgressiveMorphologicalFilter<pcl::PointXYZ> pmf;
+    pmf.setInputCloud(cloud);
+    pmf.setMaxWindowSize(max_window_size);
+    pmf.setSlope(static_cast<float>(slope)); // PMF expects float for slope
+    pmf.setInitialDistance(static_cast<float>(initial_distance)); // PMF expects float
+    pmf.setMaxDistance(static_cast<float>(max_distance)); // PMF expects float
+    pmf.setCellSize(static_cast<float>(cell_size)); // PMF expects float for cell_size in some PCL versions, ensure compatibility or use double if available
+
+    pcl::PointIndicesPtr ground_indices(new pcl::PointIndices);
+    try {
+        pmf.extract(ground_indices->indices);
+    } catch (const std::exception& e) {
+        RCLCPP_ERROR(logger, "Exception during PMF extract: %s", e.what());
+        // Return original cloud or empty cloud on error? For now, return empty obstacle cloud.
+        return filtered_cloud;
+    }
+
+    // Extract non-ground points
+    pcl::ExtractIndices<pcl::PointXYZ> extract;
+    extract.setInputCloud(cloud);
+    extract.setIndices(ground_indices);
+    extract.setNegative(true); // true = extract points NOT in indices
+    extract.filter(*filtered_cloud);
+
+    RCLCPP_DEBUG(logger, "PMF ground filtering completed (in pcl_functions). Number of obstacle points: %zu", filtered_cloud->size());
     return filtered_cloud;
 }
 
