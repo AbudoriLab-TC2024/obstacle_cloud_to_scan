@@ -15,7 +15,7 @@ def generate_launch_description():
             executable='obstacle_cloud_to_scan',
             name='obstacle_cloud_to_scan_node',
             output='screen',
-            arguments=['--ros-args', '--log-level', 'debug'],
+            # arguments=['--ros-args', '--log-level', 'debug'],
             parameters=[{
                 'target_frame': 'base_link',
                 'input_topic': '/livox/lidar',
@@ -32,11 +32,6 @@ def generate_launch_description():
                 'pmf_max_distance': 1.0,
                 'pmf_cell_size': 0.25
             }],
-            remappings=[
-                ('input_topic', '/livox_cloud_in'),
-                ('output_topic', '/filtered_point_cloud'),
-                ('laser_scan_topic', '/scan')
-            ]
         )
     ])
 

@@ -29,10 +29,6 @@ def generate_launch_description():
                 'pmf_max_distance': 3.0,
                 'pmf_cell_size': 0.5
             }],
-            remappings=[
-                ('input_topic', '/livox_cloud_in'),
-                ('output_topic', '/cloud_in'),
-            ]
         ),
         
         Node(
@@ -42,8 +38,8 @@ def generate_launch_description():
             name='pointcloud_to_laserscan_node',
             output='screen',
             remappings=[
-                ('input_topic', '/cloud_in'),  # 確認が必要
-                ('output_topic', '/scan')  # 通常のトピック名に合わせる
+                ('cloud_in', '/cloud_in'),
+                ('scan', '/scan')  # 通常のトピック名に合わせる
             ],
             parameters=[{
                 'target_frame': 'base_link',  # 空文字列から修正
