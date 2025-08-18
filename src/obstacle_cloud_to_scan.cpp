@@ -33,12 +33,12 @@
         declare_parameters();
         get_parameters();
 
+        auto sensor_qos = rclcpp::SensorDataQoS();
         point_cloud_subscriber_ = this->create_subscription<sensor_msgs::msg::PointCloud2>(
-            input_topic_, 1, std::bind(&ObstacleCloudToScanNode::pointCloudCallback, this, std::placeholders::_1));
+            input_topic_, sensor_qos, std::bind(&ObstacleCloudToScanNode::pointCloudCallback, this, std::placeholders::_1));
         RCLCPP_DEBUG(this->get_logger(), "Subscribed to topic: %s", input_topic_.c_str());
 
-        auto reliable_qos = rclcpp::QoS(rclcpp::KeepLast(5)).reliable();
-        filtered_cloud_publisher_ = this->create_publisher<sensor_msgs::msg::PointCloud2>(output_topic_,rclcpp::QoS(rclcpp::KeepLast(10)));
+        filtered_cloud_publisher_ = this->create_publisher<sensor_msgs::msg::PointCloud2>(output_topic_, sensor_qos);
         RCLCPP_DEBUG(this->get_logger(), "Publisher created for topic: %s", output_topic_.c_str());
     }
 
