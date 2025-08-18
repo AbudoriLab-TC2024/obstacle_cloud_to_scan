@@ -52,10 +52,10 @@
         this->declare_parameter<std::string>("laser_scan_topic", "/scan");
         this->declare_parameter<std::string>("ground_remove_algorithm", "NORMAL");
         this->declare_parameter<double>("voxel_leaf_size", 0.1);
-        //this->declare_parameter<double>("min_distance", 0.1);
         this->declare_parameter<std::vector<double>>("robot_box_size", {0.6, 0.6, 1.0});
         this->declare_parameter<std::vector<double>>("robot_box_position", {0.0, 0.0, 0.0});
         this->declare_parameter<double>("normal_max_slope_angle", 5.0);
+        this->declare_parameter<double>("normal_radius", 0.6);
         this->declare_parameter<int>("pmf_max_window_size", 33);
         this->declare_parameter<double>("pmf_slope", 1.0);
         this->declare_parameter<double>("pmf_initial_distance", 0.15);
@@ -74,6 +74,7 @@
         this->get_parameter("robot_box_size", robot_box_size_);
         this->get_parameter("robot_box_position", robot_box_position_);
         this->get_parameter("normal_max_slope_angle", normal_max_slope_angle_);
+        this->get_parameter("normal_radius", normal_radius_);
         this->get_parameter("pmf_max_window_size", pmf_max_window_size_);
         this->get_parameter("pmf_slope", pmf_slope_);
         this->get_parameter("pmf_initial_distance", pmf_initial_distance_);
@@ -94,6 +95,7 @@
         RCLCPP_INFO(this->get_logger(), "ground_remove_algorithm: %s", ground_remove_algorithm_.c_str());
         RCLCPP_INFO(this->get_logger(), "voxel_leaf_size: %f", voxel_leaf_size_);
         RCLCPP_INFO(this->get_logger(), "normal_max_slope_angle: %f", normal_max_slope_angle_);
+        RCLCPP_INFO(this->get_logger(), "normal_radius: %f", normal_radius_);
         RCLCPP_INFO(this->get_logger(), "pmf_max_window_size: %d", pmf_max_window_size_);
         RCLCPP_INFO(this->get_logger(), "pmf_slope: %f", pmf_slope_);
         RCLCPP_INFO(this->get_logger(), "pmf_initial_distance: %f", pmf_initial_distance_);
@@ -130,7 +132,7 @@
         // ダウンサンプリング処理
         RCLCPP_DEBUG(this->get_logger(), "Starting downsampling");
         pcl::PointCloud<pcl::PointXYZ>::Ptr downsampled_cloud 
-            = downsamplePointCloud(transformed_cloud, voxel_leaf_size_, use_gpu_, this->get_logger());
+            = downsamplePointCloud(transformed_cloud, voxel_leaf_size_, this->get_logger());
         size_t num_downsampled_points = downsampled_cloud->points.size();
         RCLCPP_DEBUG(this->get_logger(), "Downsampling completed");
 
@@ -162,7 +164,7 @@
         } else {
             RCLCPP_DEBUG(this->get_logger(), "Using original normal-based filter for ground segmentation.");
             RCLCPP_DEBUG(this->get_logger(), "Starting normal estimation");
-            pcl::PointCloud<pcl::Normal>::Ptr normals = estimateNormals(body_removed_cloud, this->get_logger());
+            pcl::PointCloud<pcl::Normal>::Ptr normals = estimateNormals(body_removed_cloud, normal_radius_, this->get_logger());
             RCLCPP_DEBUG(this->get_logger(), "Normal estimation completed");
 
             RCLCPP_DEBUG(this->get_logger(), "Starting obstacle filtering");

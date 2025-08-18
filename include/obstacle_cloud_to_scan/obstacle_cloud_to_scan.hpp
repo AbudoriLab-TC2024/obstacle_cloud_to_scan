@@ -15,7 +15,7 @@
 #include <mutex>
 #include <rclcpp/time.hpp>
 #include <rclcpp/timer.hpp>
-#include <memory> // For std::shared_ptr
+#include <memory>
 #include <tf2_ros/buffer.h>
 #include <tf2_ros/transform_listener.h>
 
@@ -46,12 +46,10 @@ private:
     std::string laser_scan_topic_;
     std::string ground_remove_algorithm_;
     double voxel_leaf_size_;
-    //double max_distance_;
-    //double min_distance_;
     std::vector<double> robot_box_size_;
     std::vector<double> robot_box_position_;
     double normal_max_slope_angle_;
-    bool use_gpu_;
+    double normal_radius_;
     double scan_angle_min_;
     double scan_angle_max_;
     double scan_range_min_;
