@@ -2,17 +2,17 @@ cmake_minimum_required(VERSION 3.5)
 project(obstacle_cloud_to_scan)
 
 # C++ 標準の設定
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+
+# ポリシーの設定
 if(POLICY CMP0074)
-    set(CMAKE_CXX_STANDARD 17)
+    cmake_policy(SET CMP0074 NEW)
 endif()
 
 if(POLICY CMP0144)
-    set(CMAKE_CXX_STANDARD_REQUIRED ON)
+    cmake_policy(SET CMP0144 NEW)
 endif()
-
-# ポリシーの設定
-cmake_policy(SET CMP0074 NEW)
-cmake_policy(SET CMP0144 NEW)
 
 # 依存パッケージの検索
 find_package(ament_cmake REQUIRED)
