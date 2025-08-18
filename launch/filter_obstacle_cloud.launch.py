@@ -19,7 +19,7 @@ def generate_launch_description():
             parameters=[{
                 'target_frame': 'base_link',
                 'input_topic': '/livox/lidar',
-                'output_topic': '/filtered_point_cloud',
+                'output_topic': '/obstacle_cloud/cloud',
                 'laser_scan_topic': '/scan',
                 'voxel_leaf_size': 0.1,
                 'max_distance': 10.0,
