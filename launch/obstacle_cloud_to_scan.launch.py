@@ -18,23 +18,17 @@ def generate_launch_description():
                 'target_frame': 'base_link',
                 'input_topic': '/livox/lidar',
                 'output_topic': '/cloud_in', # pointcloud_to_laserscanに入力
+                'ground_remove_algorithm': 'NORMAL',
                 'voxel_leaf_size': 0.1,
                 'robot_box_size': [0.9, 0.8, 1.0],
                 'robot_box_position': [0.0, 0.0, 0.0],
-                'max_slope_angle': 25.0,
-                'use_gpu': False,
-                'use_pmf_filter': True,
+                'normal_max_slope_angle': 25.0,
                 'pmf_max_window_size': 33,
                 'pmf_slope': 1.0,
                 'pmf_initial_distance': 0.15,
                 'pmf_max_distance': 3.0,
                 'pmf_cell_size': 0.5
             }],
-            remappings=[
-                ('input_topic', '/livox_cloud_in'),
-                #('output_topic', '/filtered_point_cloud'),
-                ('output_topic', '/cloud_in'),
-            ]
         ),
         
         Node(
@@ -44,8 +38,8 @@ def generate_launch_description():
             name='pointcloud_to_laserscan_node',
             output='screen',
             remappings=[
-                ('input_topic', '/filtered_point_cloud'),  # 確認が必要
-                ('output_topic', '/scan')  # 通常のトピック名に合わせる
+                ('cloud_in', '/cloud_in'),
+                ('scan', '/scan')  # 通常のトピック名に合わせる
             ],
             parameters=[{
                 'target_frame': 'base_link',  # 空文字列から修正

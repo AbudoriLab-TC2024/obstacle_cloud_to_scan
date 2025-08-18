@@ -1,13 +1,11 @@
 #include <rclcpp/rclcpp.hpp>
 #include <sensor_msgs/msg/point_cloud2.hpp>
-#include <sensor_msgs/msg/laser_scan.hpp>
 #include <pcl/point_cloud.h>
 #include <pcl/point_types.h>
 #include <pcl_conversions/pcl_conversions.h>
 #include <cmath>
 #include <tf2_ros/transform_listener.h>
 #include <tf2_ros/buffer.h>
-#include <tf2_sensor_msgs/tf2_sensor_msgs.hpp>
 #include <geometry_msgs/msg/transform_stamped.hpp>
 #include "obstacle_cloud_to_scan/pcl_functions.hpp"
 
@@ -35,28 +33,26 @@
         declare_parameters();
         get_parameters();
 
+        auto sensor_qos = rclcpp::SensorDataQoS();
         point_cloud_subscriber_ = this->create_subscription<sensor_msgs::msg::PointCloud2>(
-            input_topic_, 1, std::bind(&ObstacleCloudToScanNode::pointCloudCallback, this, std::placeholders::_1));
+            input_topic_, sensor_qos, std::bind(&ObstacleCloudToScanNode::pointCloudCallback, this, std::placeholders::_1));
         RCLCPP_DEBUG(this->get_logger(), "Subscribed to topic: %s", input_topic_.c_str());
 
-        auto reliable_qos = rclcpp::QoS(rclcpp::KeepLast(5)).reliable();
-        filtered_cloud_publisher_ = this->create_publisher<sensor_msgs::msg::PointCloud2>(output_topic_,rclcpp::QoS(rclcpp::KeepLast(10)));
+        filtered_cloud_publisher_ = this->create_publisher<sensor_msgs::msg::PointCloud2>(output_topic_, sensor_qos);
         RCLCPP_DEBUG(this->get_logger(), "Publisher created for topic: %s", output_topic_.c_str());
     }
 
     void ObstacleCloudToScanNode::declare_parameters()
     {
         this->declare_parameter<std::string>("target_frame", "base_link");
-        this->declare_parameter<std::string>("input_topic", "/input_cloud");
-        this->declare_parameter<std::string>("output_topic", "/filtered_point_cloud");
-        this->declare_parameter<std::string>("laser_scan_topic", "/scan");
+        this->declare_parameter<std::string>("input_topic", "/livox/lidar");
+        this->declare_parameter<std::string>("output_topic", "/obstacle_cloud/cloud");
+        this->declare_parameter<std::string>("ground_remove_algorithm", "NORMAL");
         this->declare_parameter<double>("voxel_leaf_size", 0.1);
-        this->declare_parameter<double>("min_distance", 0.1);
         this->declare_parameter<std::vector<double>>("robot_box_size", {0.6, 0.6, 1.0});
         this->declare_parameter<std::vector<double>>("robot_box_position", {0.0, 0.0, 0.0});
-        this->declare_parameter<double>("max_slope_angle", 5.0);
-        this->declare_parameter<bool>("use_gpu", false);
-        this->declare_parameter<bool>("use_pmf_filter", true);
+        this->declare_parameter<double>("normal_max_slope_angle", 5.0);
+        this->declare_parameter<double>("normal_radius", 0.6);
         this->declare_parameter<int>("pmf_max_window_size", 33);
         this->declare_parameter<double>("pmf_slope", 1.0);
         this->declare_parameter<double>("pmf_initial_distance", 0.15);
@@ -70,26 +66,33 @@
         this->get_parameter("target_frame", target_frame_);
         this->get_parameter("input_topic", input_topic_);
         this->get_parameter("output_topic", output_topic_);
+        this->get_parameter("ground_remove_algorithm", ground_remove_algorithm_);
         this->get_parameter("voxel_leaf_size", voxel_leaf_size_);
         this->get_parameter("robot_box_size", robot_box_size_);
         this->get_parameter("robot_box_position", robot_box_position_);
-        this->get_parameter("max_slope_angle", max_slope_angle_);
-        this->get_parameter("use_gpu", use_gpu_);
-        this->get_parameter("use_pmf_filter", use_pmf_filter_);
+        this->get_parameter("normal_max_slope_angle", normal_max_slope_angle_);
+        this->get_parameter("normal_radius", normal_radius_);
         this->get_parameter("pmf_max_window_size", pmf_max_window_size_);
         this->get_parameter("pmf_slope", pmf_slope_);
         this->get_parameter("pmf_initial_distance", pmf_initial_distance_);
         this->get_parameter("pmf_max_distance", pmf_max_distance_);
         this->get_parameter("pmf_cell_size", pmf_cell_size_);
 
+        if (ground_remove_algorithm_ != "NORMAL" && ground_remove_algorithm_ != "PMF") {
+            RCLCPP_WARN(this->get_logger(),
+                "ground_remove_algorithm must be 'NORMAL' or 'PMF'; using 'NORMAL' (got: '%s').",
+                ground_remove_algorithm_.c_str());
+            ground_remove_algorithm_ = "NORMAL";
+        }
+
         RCLCPP_INFO(this->get_logger(), "Parameters loaded:");
         RCLCPP_INFO(this->get_logger(), "target_frame: %s", target_frame_.c_str());
         RCLCPP_INFO(this->get_logger(), "input_topic: %s", input_topic_.c_str());
         RCLCPP_INFO(this->get_logger(), "output_topic: %s", output_topic_.c_str());
+        RCLCPP_INFO(this->get_logger(), "ground_remove_algorithm: %s", ground_remove_algorithm_.c_str());
         RCLCPP_INFO(this->get_logger(), "voxel_leaf_size: %f", voxel_leaf_size_);
-        RCLCPP_INFO(this->get_logger(), "max_slope_angle: %f", max_slope_angle_);
-        RCLCPP_INFO(this->get_logger(), "use_gpu: %s", use_gpu_ ? "true" : "false");
-        RCLCPP_INFO(this->get_logger(), "use_pmf_filter: %s", use_pmf_filter_ ? "true" : "false");
+        RCLCPP_INFO(this->get_logger(), "normal_max_slope_angle: %f", normal_max_slope_angle_);
+        RCLCPP_INFO(this->get_logger(), "normal_radius: %f", normal_radius_);
         RCLCPP_INFO(this->get_logger(), "pmf_max_window_size: %d", pmf_max_window_size_);
         RCLCPP_INFO(this->get_logger(), "pmf_slope: %f", pmf_slope_);
         RCLCPP_INFO(this->get_logger(), "pmf_initial_distance: %f", pmf_initial_distance_);
@@ -126,7 +129,7 @@
         // ダウンサンプリング処理
         RCLCPP_DEBUG(this->get_logger(), "Starting downsampling");
         pcl::PointCloud<pcl::PointXYZ>::Ptr downsampled_cloud 
-            = downsamplePointCloud(transformed_cloud, voxel_leaf_size_, use_gpu_, this->get_logger());
+            = downsamplePointCloud(transformed_cloud, voxel_leaf_size_, this->get_logger());
         size_t num_downsampled_points = downsampled_cloud->points.size();
         RCLCPP_DEBUG(this->get_logger(), "Downsampling completed");
 
@@ -144,7 +147,7 @@
 
         pcl::PointCloud<pcl::PointXYZ>::Ptr filtered_cloud(new pcl::PointCloud<pcl::PointXYZ>);
 
-        if (use_pmf_filter_) {
+        if (ground_remove_algorithm_ == "PMF") {
             RCLCPP_DEBUG(this->get_logger(), "Using PMF filter for ground segmentation.");
             filtered_cloud = applyProgressiveMorphologicalFilter(
                 body_removed_cloud,
@@ -157,13 +160,13 @@
             RCLCPP_DEBUG(this->get_logger(), "PMF filtering returned. Number of obstacle points: %zu", filtered_cloud ? filtered_cloud->size() : 0);
         } else {
             RCLCPP_DEBUG(this->get_logger(), "Using original normal-based filter for ground segmentation.");
-            RCLCPP_DEBUG(this->get_logger(), "Starting normal estimation (original method)");
-            pcl::PointCloud<pcl::Normal>::Ptr normals = estimateNormals(body_removed_cloud, this->get_logger());
-            RCLCPP_DEBUG(this->get_logger(), "Normal estimation completed (original method)");
+            RCLCPP_DEBUG(this->get_logger(), "Starting normal estimation");
+            pcl::PointCloud<pcl::Normal>::Ptr normals = estimateNormals(body_removed_cloud, normal_radius_, this->get_logger());
+            RCLCPP_DEBUG(this->get_logger(), "Normal estimation completed");
 
-            RCLCPP_DEBUG(this->get_logger(), "Starting obstacle filtering (original method)");
-            filtered_cloud = filterObstacles(body_removed_cloud, normals, max_slope_angle_, this->get_logger());
-            RCLCPP_DEBUG(this->get_logger(), "Obstacle filtering completed (original method). Number of obstacle points: %zu", filtered_cloud ? filtered_cloud->size() : 0);
+            RCLCPP_DEBUG(this->get_logger(), "Starting obstacle filtering");
+            filtered_cloud = filterObstacles(body_removed_cloud, normals, normal_max_slope_angle_, this->get_logger());
+            RCLCPP_DEBUG(this->get_logger(), "Obstacle filtering completed. Number of obstacle points: %zu", filtered_cloud ? filtered_cloud->size() : 0);
         }
 
         // フィルタリング後の点群をパブリッシュ

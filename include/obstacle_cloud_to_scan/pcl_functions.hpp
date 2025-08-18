@@ -13,7 +13,6 @@
 pcl::PointCloud<pcl::PointXYZ>::Ptr downsamplePointCloud(
     const pcl::PointCloud<pcl::PointXYZ>::Ptr &cloud,
     double voxel_leaf_size,
-    bool use_gpu,
     rclcpp::Logger logger);
 
 // パススルーフィルタ
@@ -25,6 +24,7 @@ pcl::PointCloud<pcl::PointXYZ>::Ptr applyPassThroughFilter(
 // 法線推定
 pcl::PointCloud<pcl::Normal>::Ptr estimateNormals(
     const pcl::PointCloud<pcl::PointXYZ>::Ptr &cloud,
+    double normal_radius,
     rclcpp::Logger logger);
 
 // 法線から障害物を割り出し
@@ -37,8 +37,8 @@ pcl::PointCloud<pcl::PointXYZ>::Ptr filterObstacles(
 // ロボット自身のポイントクラウドを除去
 pcl::PointCloud<pcl::PointXYZ>::Ptr removeRobotBody(
     const pcl::PointCloud<pcl::PointXYZ>::Ptr &cloud,
-    const std::vector<double> &box_min,
-    const std::vector<double> &box_max,
+    const std::vector<double> &box_position,
+    const std::vector<double> &box_size,
     rclcpp::Logger logger);
 
 // PMFによる地面除去

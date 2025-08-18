@@ -5,7 +5,6 @@
 pcl::PointCloud<pcl::PointXYZ>::Ptr downsamplePointCloud(
     const pcl::PointCloud<pcl::PointXYZ>::Ptr &cloud,
     double voxel_leaf_size,
-    bool use_gpu,
     rclcpp::Logger logger)
 {
     pcl::PointCloud<pcl::PointXYZ>::Ptr downsampled_cloud(new pcl::PointCloud<pcl::PointXYZ>);
@@ -13,16 +12,7 @@ pcl::PointCloud<pcl::PointXYZ>::Ptr downsamplePointCloud(
     voxel_filter.setInputCloud(cloud);
     voxel_filter.setLeafSize(voxel_leaf_size, voxel_leaf_size, voxel_leaf_size);
 
-    if (use_gpu)
-    {
-        // GPU processing can be implemented here
-        RCLCPP_DEBUG(logger, "Using GPU for voxel grid filter (not implemented)");
-    }
-    else
-    {
-        RCLCPP_DEBUG(logger, "Using CPU for voxel grid filter");
-        voxel_filter.filter(*downsampled_cloud);
-    }
+    voxel_filter.filter(*downsampled_cloud);
 
     return downsampled_cloud;
 }
@@ -90,6 +80,7 @@ pcl::PointCloud<pcl::PointXYZ>::Ptr applyProgressiveMorphologicalFilter(
 
 pcl::PointCloud<pcl::Normal>::Ptr estimateNormals(
     const pcl::PointCloud<pcl::PointXYZ>::Ptr &cloud,
+    double normal_radius,
     rclcpp::Logger logger)
 {
     pcl::PointCloud<pcl::Normal>::Ptr normals(new pcl::PointCloud<pcl::Normal>);
@@ -97,7 +88,7 @@ pcl::PointCloud<pcl::Normal>::Ptr estimateNormals(
     normal_estimation.setInputCloud(cloud);
     pcl::search::KdTree<pcl::PointXYZ>::Ptr tree(new pcl::search::KdTree<pcl::PointXYZ>);
     normal_estimation.setSearchMethod(tree);
-    normal_estimation.setRadiusSearch(0.6);
+    normal_estimation.setRadiusSearch(normal_radius);
     normal_estimation.compute(*normals);
     RCLCPP_DEBUG(logger, "Normal estimation completed");
 
