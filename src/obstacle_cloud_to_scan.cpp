@@ -171,8 +171,8 @@
         sensor_msgs::msg::PointCloud2 filtered_msg;
         pcl::toROSMsg(*filtered_cloud, filtered_msg);
 
-        filtered_msg.header.frame_id = "base_link"; // Should be target_frame_
-        filtered_msg.header.stamp = this->get_clock()->now();
+        filtered_msg.header.frame_id = target_frame_;
+        filtered_msg.header.stamp = msg->header.stamp;
         filtered_cloud_publisher_->publish(filtered_msg);
         
         auto callback_end_time = std::chrono::high_resolution_clock::now();

@@ -6,7 +6,14 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 # ポリシーの設定
-cmake_policy(SET CMP0074 NEW)
+set(CMAKE_POLICY_DEFAULT_CMP0144 NEW)
+if(POLICY CMP0074)
+    cmake_policy(SET CMP0074 NEW)
+endif()
+
+if(POLICY CMP0144)
+    cmake_policy(SET CMP0144 NEW)
+endif()
 
 # 依存パッケージの検索
 find_package(ament_cmake REQUIRED)
