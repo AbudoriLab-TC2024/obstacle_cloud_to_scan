@@ -3,7 +3,6 @@
 
 #include <rclcpp/rclcpp.hpp>
 #include <sensor_msgs/msg/point_cloud2.hpp>
-#include <sensor_msgs/msg/laser_scan.hpp>
 #include <pcl/point_cloud.h>
 #include <pcl/point_types.h>
 #include <pcl/filters/voxel_grid.h>
@@ -28,12 +27,10 @@ private:
     void declare_parameters();
     void get_parameters();
     void pointCloudCallback(const sensor_msgs::msg::PointCloud2::SharedPtr msg);
-    void publishLaserScan(const pcl::PointCloud<pcl::PointXYZ>::Ptr &points, const std_msgs::msg::Header &header);
     void logPerformance();
   
     rclcpp::Subscription<sensor_msgs::msg::PointCloud2>::SharedPtr point_cloud_subscriber_;
     rclcpp::Publisher<sensor_msgs::msg::PointCloud2>::SharedPtr filtered_cloud_publisher_;
-    rclcpp::Publisher<sensor_msgs::msg::LaserScan>::SharedPtr scan_publisher_;
 
     // TF2 members
     std::shared_ptr<tf2_ros::Buffer> tf_buffer_;
@@ -43,7 +40,6 @@ private:
     std::string target_frame_;
     std::string input_topic_;
     std::string output_topic_;
-    std::string laser_scan_topic_;
     std::string ground_remove_algorithm_;
     double voxel_leaf_size_;
     std::vector<double> robot_box_size_;

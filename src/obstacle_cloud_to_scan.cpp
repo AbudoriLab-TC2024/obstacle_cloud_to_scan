@@ -1,13 +1,11 @@
 #include <rclcpp/rclcpp.hpp>
 #include <sensor_msgs/msg/point_cloud2.hpp>
-#include <sensor_msgs/msg/laser_scan.hpp>
 #include <pcl/point_cloud.h>
 #include <pcl/point_types.h>
 #include <pcl_conversions/pcl_conversions.h>
 #include <cmath>
 #include <tf2_ros/transform_listener.h>
 #include <tf2_ros/buffer.h>
-#include <tf2_sensor_msgs/tf2_sensor_msgs.hpp>
 #include <geometry_msgs/msg/transform_stamped.hpp>
 #include "obstacle_cloud_to_scan/pcl_functions.hpp"
 
@@ -49,7 +47,6 @@
         this->declare_parameter<std::string>("target_frame", "base_link");
         this->declare_parameter<std::string>("input_topic", "/livox/lidar");
         this->declare_parameter<std::string>("output_topic", "/obstacle_cloud/cloud");
-        this->declare_parameter<std::string>("laser_scan_topic", "/scan");
         this->declare_parameter<std::string>("ground_remove_algorithm", "NORMAL");
         this->declare_parameter<double>("voxel_leaf_size", 0.1);
         this->declare_parameter<std::vector<double>>("robot_box_size", {0.6, 0.6, 1.0});
