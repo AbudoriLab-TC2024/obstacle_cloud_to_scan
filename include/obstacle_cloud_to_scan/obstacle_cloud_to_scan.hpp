@@ -28,35 +28,9 @@ private:
     void declare_parameters();
     void get_parameters();
     void pointCloudCallback(const sensor_msgs::msg::PointCloud2::SharedPtr msg);
-//    pcl::PointCloud<pcl::PointXYZ>::Ptr downsamplePointCloud(const pcl::PointCloud<pcl::PointXYZ>::Ptr &cloud);
- //   pcl::PointCloud<pcl::Normal>::Ptr estimateNormals(const pcl::PointCloud<pcl::PointXYZ>::Ptr &cloud);
-  //  pcl::PointCloud<pcl::PointXYZ>::Ptr filterObstacles(const pcl::PointCloud<pcl::PointXYZ>::Ptr &cloud, const pcl::PointCloud<pcl::Normal>::Ptr &normals);
     void publishLaserScan(const pcl::PointCloud<pcl::PointXYZ>::Ptr &points, const std_msgs::msg::Header &header);
     void logPerformance();
   
-  /*  
-    pcl::PointCloud<pcl::PointXYZ>::Ptr downsamplePointCloud(
-    const pcl::PointCloud<pcl::PointXYZ>::Ptr &cloud,
-    double voxel_leaf_size,
-    bool use_gpu,
-    rclcpp::Logger logger);
-    
-    pcl::PointCloud<pcl::PointXYZ>::Ptr applyPassThroughFilter(
-    const pcl::PointCloud<pcl::PointXYZ>::Ptr &cloud,
-    const std::vector<double> &robot_box_size,
-    rclcpp::Logger logger);
-    
-//    pcl::PointCloud<pcl::Normal>::Ptr estimateNormals(
-//    const pcl::PointCloud<pcl::PointXYZ>::Ptr &cloud,
-//    rclcpp::Logger logger);
-//
-//    pcl::PointCloud<pcl::PointXYZ>::Ptr filterObstacles(
-//    const pcl::PointCloud<pcl::PointXYZ>::Ptr &cloud,
-//    const pcl::PointCloud<pcl::Normal>::Ptr &normals,
-//    double max_slope_angle,
-//    rclcpp::Logger logger);
-    */
-
     rclcpp::Subscription<sensor_msgs::msg::PointCloud2>::SharedPtr point_cloud_subscriber_;
     rclcpp::Publisher<sensor_msgs::msg::PointCloud2>::SharedPtr filtered_cloud_publisher_;
     rclcpp::Publisher<sensor_msgs::msg::LaserScan>::SharedPtr scan_publisher_;
@@ -66,16 +40,17 @@ private:
     std::shared_ptr<tf2_ros::TransformListener> tf_listener_;
 
     // Parameters
-    std::string target_frame_; // Added this as it was missing but used in cpp
+    std::string target_frame_;
     std::string input_topic_;
     std::string output_topic_;
     std::string laser_scan_topic_;
+    std::string ground_remove_algorithm_;
     double voxel_leaf_size_;
-    double max_distance_;
-    double min_distance_;
+    //double max_distance_;
+    //double min_distance_;
     std::vector<double> robot_box_size_;
     std::vector<double> robot_box_position_;
-    double max_slope_angle_;
+    double normal_max_slope_angle_;
     bool use_gpu_;
     double scan_angle_min_;
     double scan_angle_max_;
