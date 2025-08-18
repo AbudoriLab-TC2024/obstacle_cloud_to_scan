@@ -58,7 +58,7 @@ ros2 launch obstacle_cloud_to_scan obstacle_cloud_to_scan.launch.py
 ```
 
 
-② 障害物点群出力のみ（出力:`/filtered_point_cloud`）
+② 障害物点群出力のみ（出力:`/obstacle_cloud/cloud`）
 ```sh
 ros2 launch obstacle_cloud_to_scan filter_obstacle_cloud.launch.py
 ```
@@ -111,7 +111,7 @@ pointcloud_to_laserscan ノードのパラメータ
 
 - **入力**: `/point_cloud_in` (`sensor_msgs/PointCloud2`) - 3D LiDARから点群データを受け取ります。
 - **出力**:
-  - `/filtered_point_cloud` (`sensor_msgs/PointCloud2`) - 障害物のみを含むフィルタリング後の点群データをパブリッシュします。
+  - `/obstacle_cloud/cloud` (`sensor_msgs/PointCloud2`) - 障害物のみを含むフィルタリング後の点群データをパブリッシュします。
   - `/scan` (`sensor_msgs/LaserScan`) - フィルタリングされた点群から生成された2D LaserScanメッセージをパブリッシュします。
 
 ## ライセンス
