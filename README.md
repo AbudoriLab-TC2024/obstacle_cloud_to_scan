@@ -114,5 +114,18 @@ pointcloud_to_laserscan ノードのパラメータ
   - `/obstacle_cloud/cloud` (`sensor_msgs/PointCloud2`) - 障害物のみを含むフィルタリング後の点群データをパブリッシュします。
   - `/scan` (`sensor_msgs/LaserScan`) - フィルタリングされた点群から生成された2D LaserScanメッセージをパブリッシュします。
 
+## トラブルシュート
+PointCloudやLaserScanがRviz2で表示されない場合
+
+本パッケージおよび LiDAR 系ノードは **SensorDataQoS（= Best Effort / Volatile）** を前提としています。
+RViz2 の表示はデフォルトで Reliable の場合があるため、表示が出ないときは以下を確認してください。
+
+- RViz2 の `LaserScan`（または `PointCloud2`）ディスプレイで **Reliability を Best Effort** に変更
+- QoS の整合性チェック
+```bash
+  ros2 topic info /cloud_in --verbose
+  ros2 topic info /scan --verbose
+```
+
 ## ライセンス
 このプログラムはApatch2.0のもと公開されています。詳細は`LICENSE`を参照してください。
