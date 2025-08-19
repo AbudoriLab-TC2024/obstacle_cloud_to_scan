@@ -40,6 +40,9 @@
 
         filtered_cloud_publisher_ = this->create_publisher<sensor_msgs::msg::PointCloud2>(output_topic_, sensor_qos);
         RCLCPP_DEBUG(this->get_logger(), "Publisher created for topic: %s", output_topic_.c_str());
+
+        hole_cloud_publisher_ = this->create_publisher<sensor_msgs::msg::PointCloud2>(hole_output_topic_, sensor_qos);
+        RCLCPP_DEBUG(this->get_logger(), "Hole cloud publisher created for topic: %s", hole_output_topic_.c_str());
     }
 
     void ObstacleCloudToScanNode::declare_parameters()
@@ -58,6 +61,15 @@
         this->declare_parameter<double>("pmf_initial_distance", 0.15);
         this->declare_parameter<double>("pmf_max_distance", 3.0);
         this->declare_parameter<double>("pmf_cell_size", 0.5);
+
+        // Hole detection parameters
+        this->declare_parameter<bool>("hole_detection_enabled", false);
+        this->declare_parameter<std::string>("hole_detection_algorithm", "BASIC");
+        this->declare_parameter<std::string>("hole_output_topic", "/hole_cloud/cloud");
+        this->declare_parameter<double>("hole_detection_range_x", 3.0);
+        this->declare_parameter<double>("hole_detection_range_y", 5.0);
+        this->declare_parameter<double>("hole_detection_max_height", 0.3);
+        this->declare_parameter<double>("hole_ground_tolerance", 0.05);
 
     }
 
@@ -78,11 +90,27 @@
         this->get_parameter("pmf_max_distance", pmf_max_distance_);
         this->get_parameter("pmf_cell_size", pmf_cell_size_);
 
+        // Hole detection parameters
+        this->get_parameter("hole_detection_enabled", hole_detection_enabled_);
+        this->get_parameter("hole_detection_algorithm", hole_detection_algorithm_);
+        this->get_parameter("hole_output_topic", hole_output_topic_);
+        this->get_parameter("hole_detection_range_x", hole_detection_range_x_);
+        this->get_parameter("hole_detection_range_y", hole_detection_range_y_);
+        this->get_parameter("hole_detection_max_height", hole_detection_max_height_);
+        this->get_parameter("hole_ground_tolerance", hole_ground_tolerance_);
+
         if (ground_remove_algorithm_ != "NORMAL" && ground_remove_algorithm_ != "PMF") {
             RCLCPP_WARN(this->get_logger(),
                 "ground_remove_algorithm must be 'NORMAL' or 'PMF'; using 'NORMAL' (got: '%s').",
                 ground_remove_algorithm_.c_str());
             ground_remove_algorithm_ = "NORMAL";
+        }
+
+        if (hole_detection_algorithm_ != "BASIC" && hole_detection_algorithm_ != "GRID") {
+            RCLCPP_WARN(this->get_logger(),
+                "hole_detection_algorithm must be 'BASIC' or 'GRID'; using 'BASIC' (got: '%s').",
+                hole_detection_algorithm_.c_str());
+            hole_detection_algorithm_ = "BASIC";
         }
 
         RCLCPP_INFO(this->get_logger(), "Parameters loaded:");
@@ -98,6 +126,15 @@
         RCLCPP_INFO(this->get_logger(), "pmf_initial_distance: %f", pmf_initial_distance_);
         RCLCPP_INFO(this->get_logger(), "pmf_max_distance: %f", pmf_max_distance_);
         RCLCPP_INFO(this->get_logger(), "pmf_cell_size: %f", pmf_cell_size_);
+        
+        // Hole detection parameters log
+        RCLCPP_INFO(this->get_logger(), "hole_detection_enabled: %s", hole_detection_enabled_ ? "true" : "false");
+        RCLCPP_INFO(this->get_logger(), "hole_detection_algorithm: %s", hole_detection_algorithm_.c_str());
+        RCLCPP_INFO(this->get_logger(), "hole_output_topic: %s", hole_output_topic_.c_str());
+        RCLCPP_INFO(this->get_logger(), "hole_detection_range_x: %f", hole_detection_range_x_);
+        RCLCPP_INFO(this->get_logger(), "hole_detection_range_y: %f", hole_detection_range_y_);
+        RCLCPP_INFO(this->get_logger(), "hole_detection_max_height: %f", hole_detection_max_height_);
+        RCLCPP_INFO(this->get_logger(), "hole_ground_tolerance: %f", hole_ground_tolerance_);
     }
 
     void ObstacleCloudToScanNode::pointCloudCallback(const sensor_msgs::msg::PointCloud2::SharedPtr msg)
@@ -216,6 +253,20 @@ void ObstacleCloudToScanNode::logPerformance()
     processing_times_.clear();
     downsampled_points_counts_.clear();
     last_log_time_ = this->get_clock()->now();
+}
+
+pcl::PointCloud<pcl::PointXYZ>::Ptr ObstacleCloudToScanNode::detectHoles(
+    const pcl::PointCloud<pcl::PointXYZ>::Ptr &cloud)
+{
+    // TODO: Implement hole detection logic in Phase 2
+    pcl::PointCloud<pcl::PointXYZ>::Ptr hole_cloud(new pcl::PointCloud<pcl::PointXYZ>);
+    
+    if (!hole_detection_enabled_) {
+        return hole_cloud;
+    }
+    
+    RCLCPP_DEBUG(this->get_logger(), "Hole detection is enabled but not yet implemented");
+    return hole_cloud;
 }
 
 int main(int argc, char **argv)
