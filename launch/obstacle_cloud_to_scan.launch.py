@@ -27,7 +27,16 @@ def generate_launch_description():
                 'pmf_slope': 1.0,
                 'pmf_initial_distance': 0.15,
                 'pmf_max_distance': 3.0,
-                'pmf_cell_size': 0.5
+                'pmf_cell_size': 0.5,
+                # Hole detection parameters (disabled by default)
+                'hole_detection_enabled': False,
+                'hole_detection_algorithm': 'BASIC',
+                'hole_output_topic': '/hole_cloud/cloud',
+                'lidar_frame': 'livox_frame',
+                'hole_detection_range_x': 3.0,
+                'hole_detection_range_y': 5.0,
+                'hole_detection_max_height': 0.3,
+                'hole_ground_tolerance': 0.05
             }],
         ),
         

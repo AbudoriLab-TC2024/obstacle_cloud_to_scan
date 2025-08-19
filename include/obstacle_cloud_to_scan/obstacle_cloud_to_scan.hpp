@@ -32,6 +32,9 @@ private:
     // Hole detection functions
     pcl::PointCloud<pcl::PointXYZ>::Ptr detectHoles(
         const pcl::PointCloud<pcl::PointXYZ>::Ptr &cloud);
+    
+    // Ground plane initialization
+    void initializeGroundPlane();
   
     rclcpp::Subscription<sensor_msgs::msg::PointCloud2>::SharedPtr point_cloud_subscriber_;
     rclcpp::Publisher<sensor_msgs::msg::PointCloud2>::SharedPtr filtered_cloud_publisher_;
@@ -68,10 +71,16 @@ private:
     bool hole_detection_enabled_;
     std::string hole_detection_algorithm_;
     std::string hole_output_topic_;
+    std::string lidar_frame_;
     double hole_detection_range_x_;
     double hole_detection_range_y_;
     double hole_detection_max_height_;
     double hole_ground_tolerance_;
+
+    // Ground plane and LiDAR origin for hole detection
+    GroundPlane ground_plane_;
+    pcl::PointXYZ lidar_origin_;
+    bool ground_plane_initialized_;
 
     std::vector<double> processing_times_;
     std::vector<size_t> downsampled_points_counts_;

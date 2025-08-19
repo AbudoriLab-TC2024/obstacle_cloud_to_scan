@@ -152,3 +152,98 @@ pcl::PointCloud<pcl::PointXYZ>::Ptr removeRobotBody(
 
     return filtered_cloud;
 }
+
+pcl::PointCloud<pcl::PointXYZ>::Ptr filterHoleDetectionRange(
+    const pcl::PointCloud<pcl::PointXYZ>::Ptr &cloud,
+    double range_x,
+    double range_y,
+    double max_height,
+    rclcpp::Logger logger)
+{
+    pcl::PointCloud<pcl::PointXYZ>::Ptr temp_cloud(new pcl::PointCloud<pcl::PointXYZ>);
+    pcl::PointCloud<pcl::PointXYZ>::Ptr filtered_cloud(new pcl::PointCloud<pcl::PointXYZ>);
+    
+    // X方向フィルタ (0 ~ range_x)
+    pcl::PassThrough<pcl::PointXYZ> pass_x;
+    pass_x.setInputCloud(cloud);
+    pass_x.setFilterFieldName("x");
+    pass_x.setFilterLimits(0.0, range_x);
+    pass_x.filter(*temp_cloud);
+    
+    // Y方向フィルタ (-range_y/2 ~ +range_y/2)
+    pcl::PassThrough<pcl::PointXYZ> pass_y;
+    pass_y.setInputCloud(temp_cloud);
+    pass_y.setFilterFieldName("y");
+    pass_y.setFilterLimits(-range_y/2.0, range_y/2.0);
+    pass_y.filter(*temp_cloud);
+    
+    // Z方向フィルタ (max_height以下)
+    pcl::PassThrough<pcl::PointXYZ> pass_z;
+    pass_z.setInputCloud(temp_cloud);
+    pass_z.setFilterFieldName("z");
+    pass_z.setFilterLimits(-10.0, max_height); // 下限は十分低く設定
+    pass_z.filter(*filtered_cloud);
+    
+    RCLCPP_DEBUG(logger, "Hole detection range filter: %zu -> %zu points", 
+                cloud->size(), filtered_cloud->size());
+    return filtered_cloud;
+}
+
+bool rayPlaneIntersection(
+    const pcl::PointXYZ &ray_start,
+    const pcl::PointXYZ &ray_end,
+    const GroundPlane &plane,
+    pcl::PointXYZ &intersection)
+{
+    // 光線の方向ベクトル
+    double dx = ray_end.x - ray_start.x;
+    double dy = ray_end.y - ray_start.y;
+    double dz = ray_end.z - ray_start.z;
+    
+    // 光線の方向ベクトルと平面法線の内積
+    double denominator = plane.a * dx + plane.b * dy + plane.c * dz;
+    
+    // 平行チェック（内積が0に近い場合）
+    if (std::abs(denominator) < 1e-6) {
+        return false; // 光線と平面が平行
+    }
+    
+    // 交点パラメータt を計算
+    double numerator = -(plane.a * ray_start.x + plane.b * ray_start.y + 
+                        plane.c * ray_start.z + plane.d);
+    double t = numerator / denominator;
+    
+    // 交点を計算
+    intersection.x = ray_start.x + t * dx;
+    intersection.y = ray_start.y + t * dy;
+    intersection.z = ray_start.z + t * dz;
+    
+    return true;
+}
+
+pcl::PointCloud<pcl::PointXYZ>::Ptr detectHolesBasic(
+    const pcl::PointCloud<pcl::PointXYZ>::Ptr &cloud,
+    const pcl::PointXYZ &lidar_origin,
+    const GroundPlane &ground_plane,
+    double ground_tolerance,
+    rclcpp::Logger logger)
+{
+    pcl::PointCloud<pcl::PointXYZ>::Ptr hole_cloud(new pcl::PointCloud<pcl::PointXYZ>);
+    
+    for (const auto &point : cloud->points) {
+        // LiDARから点への光線と地面平面の交点を計算
+        pcl::PointXYZ intersection;
+        if (!rayPlaneIntersection(lidar_origin, point, ground_plane, intersection)) {
+            continue; // 交点計算失敗（平行など）
+        }
+        
+        // 交点比較による穴判定（座標系に依存しない方法）
+        if (point.z < intersection.z - ground_tolerance) {
+            hole_cloud->points.push_back(point);
+        }
+    }
+    
+    RCLCPP_DEBUG(logger, "Hole detection: %zu -> %zu hole points", 
+                cloud->size(), hole_cloud->size());
+    return hole_cloud;
+}
