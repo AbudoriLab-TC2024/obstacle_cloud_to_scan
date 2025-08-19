@@ -189,6 +189,9 @@
 
         pcl::PointCloud<pcl::PointXYZ>::Ptr filtered_cloud(new pcl::PointCloud<pcl::PointXYZ>);
 
+        // 障害物検知処理時間計測開始
+        auto obstacle_start_time = std::chrono::high_resolution_clock::now();
+
         if (ground_remove_algorithm_ == "PMF") {
             RCLCPP_DEBUG(this->get_logger(), "Using PMF filter for ground segmentation.");
             filtered_cloud = applyProgressiveMorphologicalFilter(
@@ -211,13 +214,24 @@
             RCLCPP_DEBUG(this->get_logger(), "Obstacle filtering completed. Number of obstacle points: %zu", filtered_cloud ? filtered_cloud->size() : 0);
         }
 
+        // 障害物検知処理時間計測終了
+        auto obstacle_end_time = std::chrono::high_resolution_clock::now();
+        double obstacle_processing_time_ms = std::chrono::duration<double, std::milli>(obstacle_end_time - obstacle_start_time).count();
+
         // 地面平面初期化（初回のみ）
         if (!ground_plane_initialized_ && hole_detection_enabled_) {
             initializeGroundPlane();
         }
 
+        // 穴検知処理時間計測開始
+        auto hole_start_time = std::chrono::high_resolution_clock::now();
+        
         // 穴検知処理
         pcl::PointCloud<pcl::PointXYZ>::Ptr hole_cloud = detectHoles(body_removed_cloud);
+        
+        // 穴検知処理時間計測終了
+        auto hole_end_time = std::chrono::high_resolution_clock::now();
+        double hole_processing_time_ms = std::chrono::duration<double, std::milli>(hole_end_time - hole_start_time).count();
 
         // 障害物点群をパブリッシュ
         RCLCPP_DEBUG(this->get_logger(), "Publishing filtered point cloud");
@@ -250,6 +264,10 @@
             std::lock_guard<std::mutex> lock(data_mutex_);
             processing_times_.push_back(total_processing_time_ms);
             downsampled_points_counts_.push_back(num_downsampled_points);
+            
+            // 分離されたパフォーマンス計測データを収集
+            obstacle_processing_times_.push_back(obstacle_processing_time_ms);
+            hole_processing_times_.push_back(hole_processing_time_ms);
         }
         RCLCPP_DEBUG(this->get_logger(), "PointCloud callback finished processing.");
     }
@@ -263,23 +281,50 @@ void ObstacleCloudToScanNode::logPerformance()
         return; // Nothing to log
     }
 
+    // 総処理時間の平均
     double sum_processing_time = 0.0;
     for (double time : processing_times_) {
         sum_processing_time += time;
     }
     double avg_processing_time = sum_processing_time / processing_times_.size();
 
+    // ダウンサンプル点数の平均
     size_t sum_points = 0;
     for (size_t count : downsampled_points_counts_) {
         sum_points += count;
     }
     double avg_downsampled_points = static_cast<double>(sum_points) / downsampled_points_counts_.size();
 
-    RCLCPP_INFO(this->get_logger(), "Avg Process Time (last 1s): %.3f ms", avg_processing_time);
-    RCLCPP_INFO(this->get_logger(), "Avg Downsampled Points (last 1s): %.0f", avg_downsampled_points);
+    // 障害物検知処理時間の平均
+    double avg_obstacle_time = 0.0;
+    if (!obstacle_processing_times_.empty()) {
+        double sum_obstacle_time = 0.0;
+        for (double time : obstacle_processing_times_) {
+            sum_obstacle_time += time;
+        }
+        avg_obstacle_time = sum_obstacle_time / obstacle_processing_times_.size();
+    }
 
+    // 穴検知処理時間の平均
+    double avg_hole_time = 0.0;
+    if (!hole_processing_times_.empty()) {
+        double sum_hole_time = 0.0;
+        for (double time : hole_processing_times_) {
+            sum_hole_time += time;
+        }
+        avg_hole_time = sum_hole_time / hole_processing_times_.size();
+    }
+
+    // ログ出力
+    RCLCPP_INFO(this->get_logger(), "Avg Total Time: %.3f ms | Obstacle: %.3f ms | Hole: %.3f ms", 
+               avg_processing_time, avg_obstacle_time, avg_hole_time);
+    RCLCPP_INFO(this->get_logger(), "Avg Downsampled Points: %.0f", avg_downsampled_points);
+
+    // データクリア
     processing_times_.clear();
     downsampled_points_counts_.clear();
+    obstacle_processing_times_.clear();
+    hole_processing_times_.clear();
     last_log_time_ = this->get_clock()->now();
 }
 

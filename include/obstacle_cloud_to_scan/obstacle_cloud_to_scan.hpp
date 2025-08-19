@@ -84,6 +84,11 @@ private:
 
     std::vector<double> processing_times_;
     std::vector<size_t> downsampled_points_counts_;
+    
+    // Separated performance metrics for obstacle detection and hole detection
+    std::vector<double> obstacle_processing_times_;
+    std::vector<double> hole_processing_times_;
+    
     rclcpp::Time last_log_time_;
     rclcpp::TimerBase::SharedPtr logging_timer_;
     std::mutex data_mutex_;
