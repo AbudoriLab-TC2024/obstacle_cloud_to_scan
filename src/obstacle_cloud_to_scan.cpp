@@ -242,18 +242,19 @@
         filtered_msg.header.stamp = msg->header.stamp;
         filtered_cloud_publisher_->publish(filtered_msg);
 
-        // 穴点群をパブリッシュ
+        // 穴点群をパブリッシュ（空でも常にパブリッシュしてRViz表示を更新）
         if (hole_detection_enabled_) {
+            sensor_msgs::msg::PointCloud2 hole_msg;
+            pcl::toROSMsg(*hole_cloud, hole_msg);
+
+            hole_msg.header.frame_id = target_frame_;
+            hole_msg.header.stamp = msg->header.stamp;
+            hole_cloud_publisher_->publish(hole_msg);
+            
             if (hole_cloud->size() > 0) {
                 RCLCPP_DEBUG(this->get_logger(), "Publishing hole point cloud with %zu points", hole_cloud->size());
-                sensor_msgs::msg::PointCloud2 hole_msg;
-                pcl::toROSMsg(*hole_cloud, hole_msg);
-
-                hole_msg.header.frame_id = target_frame_;
-                hole_msg.header.stamp = msg->header.stamp;
-                hole_cloud_publisher_->publish(hole_msg);
             } else {
-                RCLCPP_DEBUG(this->get_logger(), "No hole points detected, not publishing hole cloud");
+                RCLCPP_DEBUG(this->get_logger(), "Publishing empty hole cloud to update RViz display");
             }
         }
         

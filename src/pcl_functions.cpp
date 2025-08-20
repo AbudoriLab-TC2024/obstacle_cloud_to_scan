@@ -237,9 +237,19 @@ pcl::PointCloud<pcl::PointXYZ>::Ptr detectHolesBasic(
             continue; // 交点計算失敗（平行など）
         }
         
-        // 交点比較による穴判定（座標系に依存しない方法）
-        if (point.z < intersection.z - ground_tolerance) {
-            hole_cloud->points.push_back(point);
+        // 距離ベース穴判定（より精密な検知）
+        double lidar_to_point_distance = sqrt(
+            pow(point.x - lidar_origin.x, 2) + 
+            pow(point.y - lidar_origin.y, 2) + 
+            pow(point.z - lidar_origin.z, 2));
+        double lidar_to_intersection_distance = sqrt(
+            pow(intersection.x - lidar_origin.x, 2) + 
+            pow(intersection.y - lidar_origin.y, 2) + 
+            pow(intersection.z - lidar_origin.z, 2));
+
+        // 実際の点が期待される地面交点より明らかに遠い場合のみ穴と判定
+        if (lidar_to_point_distance > lidar_to_intersection_distance + ground_tolerance) {
+            hole_cloud->points.push_back(intersection);
         }
     }
     
