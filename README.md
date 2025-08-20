@@ -8,6 +8,9 @@
 `obstacle_cloud_to_scan` は、入力点群をロボット座標系へTF変換・ダウンサンプリング・ロボット車体除去・地面除去（PMFまたは法線ベース）し、**障害物点のみ**の`PointCloud2`を出力します。  
 従来の2D LiDARだけでは拾いにくい「机の脚」「パイロン」などの細い障害物も検出しつつ、**登坂可能な傾斜**や**小段差**は障害物として出力しないノードです。
 
+穴検知機能をオンにすると、段差やくぼみでロボットが落下すると考えられる場所に穴点群として出力されます。  
+この穴点群をNavigationなどに利用することで落下防止機能として期待できます。
+
 ```mermaid
 graph LR
   A[3D LiDAR] -->|/livox/lidar など| B[obstacle_cloud_to_scan]
@@ -21,6 +24,10 @@ graph LR
   - **法線ベース**（台車や低い机を地面と見てしまうことがあるが、高速に処理できます）
   - **PMF**（台車や低い机を見逃さず障害物検知します）
 - 障害物のみの点群をそのまま `pointcloud_to_laserscan` に接続
+- **穴・段差検知機能**（オプション）
+  - LiDAR光線と地面平面の交点計算による穴検知
+  - 階段落下防止やくぼみ回避に利用可能
+  - 軽量実装（既存処理への影響1%未満）
 
 
 ## 動作環境
@@ -83,10 +90,31 @@ obstacle_cloud_to_scan ノードのパラメータ
 | `pmf_initial_distance`| `double`    | PMF初期距離[m]                      | `0.15`         |
 | `pmf_max_distance`| `double`    | PMF最大距離[m]                      | `3.0`         |
 | `pmf_cell_size`| `double`    | PMFセルサイズ[m]                      | `0.5`         |
+| `hole_detection_enabled`| `bool`    | 穴検知機能の有効/無効                      | `false`         |
+| `hole_detection_algorithm`| `string`    | 穴検知アルゴリズム（`BASIC`, `GRID`）                    | `BASIC`         |
+| `hole_output_topic`| `string`    | 穴点群の出力トピック名                      | `/hole_cloud/cloud`         |
+| `lidar_frame`| `string`    | LiDARセンサのフレーム名                      | `livox_frame`         |
+| `hole_detection_range_x`| `double`    | 穴検知範囲のX方向[m]（前方への検知距離）                      | `3.0`         |
+| `hole_detection_range_y`| `double`    | 穴検知範囲のY方向[m]（左右への検知幅）                     | `5.0`         |
+| `hole_detection_max_height`| `double`    | 穴検知対象の最大高さ[m]                      | `0.3`         |
+| `hole_ground_tolerance`| `double`    | 地面からの許容誤差[m]（穴判定の閾値）                     | `0.05`         |
 
 障害物のみを残す、地面除去アルゴリズムは選択ができます。パラメータの`ground_remove_algorithm`で指定してください。
 - 法線[NORMAL]: 法線を見て水平な物体を取り除きます。地面と同時に小さな平らな物体が障害物として残らないことがありますが高速です。
 - PMF[PMF]: モルフォロジー処理で地面のみを除去します。室内などモノが多い環境だと速度が低下しますが正確に地面のみを除去します。
+
+### 穴検知機能
+`hole_detection_enabled`を`true`にすると穴検知機能が有効になります。この機能は以下の仕組みで動作します：
+
+- **検知原理**: LiDARの光線と地面平面の交点を計算し、実際の点群との距離を比較
+- **検知範囲**: ロボット前方`hole_detection_range_x`m × 左右`hole_detection_range_y`m
+- **高さ制限**: 地面から`hole_detection_max_height`m以下の点群のみを対象
+- **判定閾値**: `hole_ground_tolerance`以上の深さを穴として判定
+- **出力**: 穴の位置（地面交点）を`hole_output_topic`にパブリッシュ
+
+穴検知アルゴリズムは以下から選択できます：
+- **BASIC**: 基本的な光線-平面交点計算による穴検知（推奨）
+- **GRID**: グリッドベースの高度な穴検知（将来実装予定）
 
 
 pointcloud_to_laserscan ノードのパラメータ
@@ -113,6 +141,7 @@ pointcloud_to_laserscan ノードのパラメータ
 - **出力**:
   - `/obstacle_cloud/cloud` (`sensor_msgs/PointCloud2`) - 障害物のみを含むフィルタリング後の点群データをパブリッシュします。
   - `/scan` (`sensor_msgs/LaserScan`) - フィルタリングされた点群から生成された2D LaserScanメッセージをパブリッシュします。
+  - `/hole_cloud/cloud` (`sensor_msgs/PointCloud2`) - 穴検知機能有効時に、検知された穴の位置をパブリッシュします。
 
 ## トラブルシュート
 PointCloudやLaserScanがRviz2で表示されない場合
