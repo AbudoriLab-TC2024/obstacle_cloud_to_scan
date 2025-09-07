@@ -346,3 +346,92 @@ void removeRobotBodyInPlace(
     
     RCLCPP_DEBUG(logger, "In-place robot body removal: %zu -> %zu points", original_size, cloud->size());
 }
+
+// ===============================================
+// Two-tier distance-based hierarchical filtering
+// ===============================================
+
+double calculateDistance(const pcl::PointXYZ &point, const pcl::PointXYZ &origin)
+{
+    double dx = point.x - origin.x;
+    double dy = point.y - origin.y;
+    double dz = point.z - origin.z;
+    return std::sqrt(dx * dx + dy * dy + dz * dz);
+}
+
+void applyTwoTierDownsampling(
+    pcl::PointCloud<pcl::PointXYZ>::Ptr &cloud,
+    double base_voxel_size,
+    double collision_distance_threshold,
+    double far_zone_voxel_multiplier,
+    rclcpp::Logger logger)
+{
+    RCLCPP_DEBUG(logger, "Starting two-tier downsampling with %zu points", cloud->size());
+    
+    // 近距離・遠距離点群を分離
+    pcl::PointCloud<pcl::PointXYZ>::Ptr near_cloud(new pcl::PointCloud<pcl::PointXYZ>);
+    pcl::PointCloud<pcl::PointXYZ>::Ptr far_cloud(new pcl::PointCloud<pcl::PointXYZ>);
+    
+    pcl::PointXYZ origin(0.0, 0.0, 0.0);
+    
+    for (const auto &point : cloud->points) {
+        double distance = calculateDistance(point, origin);
+        if (distance <= collision_distance_threshold) {
+            near_cloud->points.push_back(point);
+        } else {
+            far_cloud->points.push_back(point);
+        }
+    }
+    
+    RCLCPP_DEBUG(logger, "Distance separation: Near(%zu) / Far(%zu) points", 
+                near_cloud->size(), far_cloud->size());
+    
+    // 近距離: 高精度ダウンサンプリング
+    if (!near_cloud->empty()) {
+        pcl::VoxelGrid<pcl::PointXYZ> near_filter;
+        near_filter.setInputCloud(near_cloud);
+        near_filter.setLeafSize(base_voxel_size, base_voxel_size, base_voxel_size);
+        near_filter.filter(*near_cloud);
+    }
+    
+    // 遠距離: 低精度ダウンサンプリング
+    if (!far_cloud->empty()) {
+        double far_voxel_size = base_voxel_size * far_zone_voxel_multiplier;
+        pcl::VoxelGrid<pcl::PointXYZ> far_filter;
+        far_filter.setInputCloud(far_cloud);
+        far_filter.setLeafSize(far_voxel_size, far_voxel_size, far_voxel_size);
+        far_filter.filter(*far_cloud);
+    }
+    
+    // 結果を統合
+    cloud->clear();
+    *cloud += *near_cloud;
+    *cloud += *far_cloud;
+    
+    RCLCPP_DEBUG(logger, "Two-tier downsampling completed: Near(%zu) + Far(%zu) = Total(%zu) points", 
+                near_cloud->size(), far_cloud->size(), cloud->size());
+}
+
+void applyHierarchicalFilteringPipeline(
+    pcl::PointCloud<pcl::PointXYZ>::Ptr &cloud,
+    double base_voxel_size,
+    const std::vector<double> &robot_box_size,
+    const std::vector<double> &robot_box_position,
+    double collision_distance_threshold,
+    double far_zone_voxel_multiplier,
+    rclcpp::Logger logger)
+{
+    RCLCPP_DEBUG(logger, "Starting hierarchical filtering pipeline with %zu points", cloud->size());
+    
+    // Step 1: 2段階階層ダウンサンプリング（最も効果的）
+    applyTwoTierDownsampling(cloud, base_voxel_size, collision_distance_threshold, 
+                            far_zone_voxel_multiplier, logger);
+    
+    // Step 2: パススルーフィルタ (高さ制限)
+    applyPassThroughFilterInPlace(cloud, robot_box_size, logger);
+    
+    // Step 3: ロボット体除去
+    removeRobotBodyInPlace(cloud, robot_box_position, robot_box_size, logger);
+    
+    RCLCPP_DEBUG(logger, "Hierarchical filtering pipeline completed with %zu points", cloud->size());
+}

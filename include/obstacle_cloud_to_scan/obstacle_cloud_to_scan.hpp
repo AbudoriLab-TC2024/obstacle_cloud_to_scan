@@ -67,6 +67,11 @@ private:
     double pmf_max_distance_;
     double pmf_cell_size_;
 
+    // Hierarchical Filtering Parameters
+    bool enable_hierarchical_filtering_;
+    double collision_distance_threshold_;
+    double far_zone_voxel_multiplier_;
+
     // Hole Detection Parameters
     bool hole_detection_enabled_;
     std::string hole_detection_algorithm_;

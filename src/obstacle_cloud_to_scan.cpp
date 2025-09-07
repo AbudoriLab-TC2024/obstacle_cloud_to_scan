@@ -64,6 +64,11 @@
         this->declare_parameter<double>("pmf_max_distance", 3.0);
         this->declare_parameter<double>("pmf_cell_size", 0.5);
 
+        // Hierarchical filtering parameters
+        this->declare_parameter<bool>("enable_hierarchical_filtering", false);
+        this->declare_parameter<double>("collision_distance_threshold", 3.0);
+        this->declare_parameter<double>("far_zone_voxel_multiplier", 2.0);
+
         // Hole detection parameters
         this->declare_parameter<bool>("hole_detection_enabled", false);
         this->declare_parameter<std::string>("hole_detection_algorithm", "BASIC");
@@ -92,6 +97,11 @@
         this->get_parameter("pmf_initial_distance", pmf_initial_distance_);
         this->get_parameter("pmf_max_distance", pmf_max_distance_);
         this->get_parameter("pmf_cell_size", pmf_cell_size_);
+
+        // Hierarchical filtering parameters
+        this->get_parameter("enable_hierarchical_filtering", enable_hierarchical_filtering_);
+        this->get_parameter("collision_distance_threshold", collision_distance_threshold_);
+        this->get_parameter("far_zone_voxel_multiplier", far_zone_voxel_multiplier_);
 
         // Hole detection parameters
         this->get_parameter("hole_detection_enabled", hole_detection_enabled_);
@@ -130,6 +140,11 @@
         RCLCPP_INFO(this->get_logger(), "pmf_initial_distance: %f", pmf_initial_distance_);
         RCLCPP_INFO(this->get_logger(), "pmf_max_distance: %f", pmf_max_distance_);
         RCLCPP_INFO(this->get_logger(), "pmf_cell_size: %f", pmf_cell_size_);
+        
+        // Hierarchical filtering parameters log
+        RCLCPP_INFO(this->get_logger(), "enable_hierarchical_filtering: %s", enable_hierarchical_filtering_ ? "true" : "false");
+        RCLCPP_INFO(this->get_logger(), "collision_distance_threshold: %f", collision_distance_threshold_);
+        RCLCPP_INFO(this->get_logger(), "far_zone_voxel_multiplier: %f", far_zone_voxel_multiplier_);
         
         // Hole detection parameters log
         RCLCPP_INFO(this->get_logger(), "hole_detection_enabled: %s", hole_detection_enabled_ ? "true" : "false");
@@ -180,17 +195,26 @@
         tf_time_ms = std::chrono::duration<double, std::milli>(tf_end_time - tf_start_time).count();
         RCLCPP_DEBUG(this->get_logger(), "TF Transform: %.3f ms (%zu points)", tf_time_ms, cloud->size());
           
-        // インプレース統合フィルタリングパイプライン
+        // フィルタリングパイプライン選択
         filtering_start_time = std::chrono::high_resolution_clock::now();
         size_t original_points = cloud->size();
         
-        applyInPlaceFilteringPipeline(cloud, voxel_leaf_size_, robot_box_size_, robot_box_position_, this->get_logger());
+        if (enable_hierarchical_filtering_) {
+            // Phase 2: 階層フィルタリングパイプライン
+            applyHierarchicalFilteringPipeline(cloud, voxel_leaf_size_, robot_box_size_, robot_box_position_,
+                                              collision_distance_threshold_, far_zone_voxel_multiplier_, this->get_logger());
+            RCLCPP_DEBUG(this->get_logger(), "Hierarchical filtering enabled");
+        } else {
+            // Phase 1: インプレース統合フィルタリングパイプライン
+            applyInPlaceFilteringPipeline(cloud, voxel_leaf_size_, robot_box_size_, robot_box_position_, this->get_logger());
+            RCLCPP_DEBUG(this->get_logger(), "Standard in-place filtering enabled");
+        }
         
         filtering_end_time = std::chrono::high_resolution_clock::now();
         filtering_time_ms = std::chrono::duration<double, std::milli>(filtering_end_time - filtering_start_time).count();
         size_t filtered_points = cloud->size();
         
-        RCLCPP_DEBUG(this->get_logger(), "In-place filtering pipeline: %.3f ms (%zu -> %zu points, %.1f%% reduction)", 
+        RCLCPP_DEBUG(this->get_logger(), "Filtering pipeline: %.3f ms (%zu -> %zu points, %.1f%% reduction)", 
                     filtering_time_ms, original_points, filtered_points, 
                     100.0 * (1.0 - static_cast<double>(filtered_points) / original_points));
 

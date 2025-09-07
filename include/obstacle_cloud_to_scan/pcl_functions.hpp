@@ -116,4 +116,29 @@ void removeRobotBodyInPlace(
     const std::vector<double> &box_size,
     rclcpp::Logger logger);
 
+// ===============================================
+// Phase 2: Two-tier distance-based filtering
+// ===============================================
+
+// 点から原点までの距離計算
+double calculateDistance(const pcl::PointXYZ &point, const pcl::PointXYZ &origin = pcl::PointXYZ(0,0,0));
+
+// 2段階階層ダウンサンプリング（近距離=高精度、遠距離=低精度）
+void applyTwoTierDownsampling(
+    pcl::PointCloud<pcl::PointXYZ>::Ptr &cloud,
+    double base_voxel_size,
+    double collision_distance_threshold,  // デフォルト3.0m
+    double far_zone_voxel_multiplier,     // デフォルト2.0 (遠方は2倍粗く)
+    rclcpp::Logger logger);
+
+// 距離ベース階層フィルタリング統合パイプライン
+void applyHierarchicalFilteringPipeline(
+    pcl::PointCloud<pcl::PointXYZ>::Ptr &cloud,
+    double base_voxel_size,
+    const std::vector<double> &robot_box_size,
+    const std::vector<double> &robot_box_position,
+    double collision_distance_threshold,
+    double far_zone_voxel_multiplier,
+    rclcpp::Logger logger);
+
 #endif // PCL_PROCESSING_FUNCTIONS_H

@@ -28,6 +28,12 @@ def generate_launch_description():
                 'pmf_initial_distance': 0.15,
                 'pmf_max_distance': 3.0,
                 'pmf_cell_size': 0.5,
+                
+                # Phase 2: Hierarchical filtering parameters (disabled by default for optimal performance)
+                'enable_hierarchical_filtering': False,  # Set to True for large-scale environments or safety-critical applications
+                'collision_distance_threshold': 3.0,    # Distance threshold for near/far classification (meters)
+                'far_zone_voxel_multiplier': 2.0,      # Voxel size multiplier for far zone (2.0 = 2x coarser)
+                
                 # Hole detection parameters (disabled by default)
                 'hole_detection_enabled': False,
                 'hole_detection_algorithm': 'BASIC',
