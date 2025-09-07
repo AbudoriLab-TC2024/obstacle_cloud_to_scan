@@ -28,9 +28,17 @@ private:
     void get_parameters();
     void pointCloudCallback(const sensor_msgs::msg::PointCloud2::SharedPtr msg);
     void logPerformance();
+    
+    // Hole detection functions
+    pcl::PointCloud<pcl::PointXYZ>::Ptr detectHoles(
+        const pcl::PointCloud<pcl::PointXYZ>::Ptr &cloud);
+    
+    // Ground plane initialization
+    void initializeGroundPlane();
   
     rclcpp::Subscription<sensor_msgs::msg::PointCloud2>::SharedPtr point_cloud_subscriber_;
     rclcpp::Publisher<sensor_msgs::msg::PointCloud2>::SharedPtr filtered_cloud_publisher_;
+    rclcpp::Publisher<sensor_msgs::msg::PointCloud2>::SharedPtr hole_cloud_publisher_;
 
     // TF2 members
     std::shared_ptr<tf2_ros::Buffer> tf_buffer_;
@@ -59,8 +67,28 @@ private:
     double pmf_max_distance_;
     double pmf_cell_size_;
 
+    // Hole Detection Parameters
+    bool hole_detection_enabled_;
+    std::string hole_detection_algorithm_;
+    std::string hole_output_topic_;
+    std::string lidar_frame_;
+    double hole_detection_range_x_;
+    double hole_detection_range_y_;
+    double hole_detection_max_height_;
+    double hole_ground_tolerance_;
+
+    // Ground plane and LiDAR origin for hole detection
+    GroundPlane ground_plane_;
+    pcl::PointXYZ lidar_origin_;
+    bool ground_plane_initialized_;
+
     std::vector<double> processing_times_;
     std::vector<size_t> downsampled_points_counts_;
+    
+    // Separated performance metrics for obstacle detection and hole detection
+    std::vector<double> obstacle_processing_times_;
+    std::vector<double> hole_processing_times_;
+    
     rclcpp::Time last_log_time_;
     rclcpp::TimerBase::SharedPtr logging_timer_;
     std::mutex data_mutex_;
