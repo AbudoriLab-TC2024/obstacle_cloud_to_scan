@@ -257,3 +257,92 @@ pcl::PointCloud<pcl::PointXYZ>::Ptr detectHolesBasic(
                 cloud->size(), hole_cloud->size());
     return hole_cloud;
 }
+
+// ===============================================
+// Phase 1: Memory-optimized in-place functions
+// ===============================================
+
+void applyInPlaceFilteringPipeline(
+    pcl::PointCloud<pcl::PointXYZ>::Ptr &cloud,
+    double voxel_leaf_size,
+    const std::vector<double> &robot_box_size,
+    const std::vector<double> &robot_box_position,
+    rclcpp::Logger logger)
+{
+    RCLCPP_DEBUG(logger, "Starting in-place filtering pipeline with %zu points", cloud->size());
+    
+    // Step 1: ダウンサンプリング (最も効果的な削減)
+    downsamplePointCloudInPlace(cloud, voxel_leaf_size, logger);
+    
+    // Step 2: パススルーフィルタ (高さ制限)
+    applyPassThroughFilterInPlace(cloud, robot_box_size, logger);
+    
+    // Step 3: ロボット体除去
+    removeRobotBodyInPlace(cloud, robot_box_position, robot_box_size, logger);
+    
+    RCLCPP_DEBUG(logger, "In-place filtering pipeline completed with %zu points", cloud->size());
+}
+
+void downsamplePointCloudInPlace(
+    pcl::PointCloud<pcl::PointXYZ>::Ptr &cloud,
+    double voxel_leaf_size,
+    rclcpp::Logger logger)
+{
+    size_t original_size = cloud->size();
+    
+    pcl::VoxelGrid<pcl::PointXYZ> voxel_filter;
+    voxel_filter.setInputCloud(cloud);
+    voxel_filter.setLeafSize(voxel_leaf_size, voxel_leaf_size, voxel_leaf_size);
+    
+    // 同じポインタに結果を書き戻し
+    voxel_filter.filter(*cloud);
+    
+    RCLCPP_DEBUG(logger, "In-place downsampling: %zu -> %zu points", original_size, cloud->size());
+}
+
+void applyPassThroughFilterInPlace(
+    pcl::PointCloud<pcl::PointXYZ>::Ptr &cloud,
+    const std::vector<double> &robot_box_size,
+    rclcpp::Logger logger)
+{
+    size_t original_size = cloud->size();
+    
+    pcl::PassThrough<pcl::PointXYZ> pass;
+    pass.setInputCloud(cloud);
+    pass.setFilterFieldName("z");
+    pass.setFilterLimits(-1.0, robot_box_size[2] + 0.3);
+    
+    // 同じポインタに結果を書き戻し
+    pass.filter(*cloud);
+    
+    RCLCPP_DEBUG(logger, "In-place passthrough: %zu -> %zu points", original_size, cloud->size());
+}
+
+void removeRobotBodyInPlace(
+    pcl::PointCloud<pcl::PointXYZ>::Ptr &cloud,
+    const std::vector<double> &box_position,
+    const std::vector<double> &box_size,
+    rclcpp::Logger logger)
+{
+    size_t original_size = cloud->size();
+    
+    pcl::CropBox<pcl::PointXYZ> crop_box_filter;
+    crop_box_filter.setInputCloud(cloud);
+
+    // ロボット体のバウンディングボックス設定
+    Eigen::Vector4f min_point(-(box_size[0]/2)+box_position[0],
+                              -(box_size[1]/2)+box_position[1], 
+                              0.0+box_position[2], 1.0);
+    Eigen::Vector4f max_point(box_size[0]/2+box_position[0], 
+                              box_size[1]/2+box_position[1],
+                              box_size[2]+box_position[2], 1.0);
+
+    crop_box_filter.setMin(min_point);
+    crop_box_filter.setMax(max_point);
+    crop_box_filter.setNegative(true);  // ボックス内の点群を除去
+
+    // 同じポインタに結果を書き戻し
+    crop_box_filter.filter(*cloud);
+    
+    RCLCPP_DEBUG(logger, "In-place robot body removal: %zu -> %zu points", original_size, cloud->size());
+}

@@ -85,4 +85,35 @@ pcl::PointCloud<pcl::PointXYZ>::Ptr detectHolesBasic(
     double ground_tolerance,
     rclcpp::Logger logger);
 
+// ===============================================
+// Phase 1: Memory-optimized in-place functions
+// ===============================================
+
+// インプレース版 - 統合フィルタリングパイプライン
+void applyInPlaceFilteringPipeline(
+    pcl::PointCloud<pcl::PointXYZ>::Ptr &cloud,
+    double voxel_leaf_size,
+    const std::vector<double> &robot_box_size,
+    const std::vector<double> &robot_box_position,
+    rclcpp::Logger logger);
+
+// インプレース版 - ダウンサンプリング
+void downsamplePointCloudInPlace(
+    pcl::PointCloud<pcl::PointXYZ>::Ptr &cloud,
+    double voxel_leaf_size,
+    rclcpp::Logger logger);
+
+// インプレース版 - パススルーフィルタ
+void applyPassThroughFilterInPlace(
+    pcl::PointCloud<pcl::PointXYZ>::Ptr &cloud,
+    const std::vector<double> &robot_box_size,
+    rclcpp::Logger logger);
+
+// インプレース版 - ロボット体除去
+void removeRobotBodyInPlace(
+    pcl::PointCloud<pcl::PointXYZ>::Ptr &cloud,
+    const std::vector<double> &box_position,
+    const std::vector<double> &box_size,
+    rclcpp::Logger logger);
+
 #endif // PCL_PROCESSING_FUNCTIONS_H
