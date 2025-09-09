@@ -72,6 +72,10 @@ private:
     double collision_distance_threshold_;
     double far_zone_voxel_multiplier_;
 
+    // Parallelization Parameters
+    int num_threads_;                  // 1=single thread, >1=parallel processing
+    int parallel_threshold_points_;    // Minimum points to enable parallelization
+
     // Hole Detection Parameters
     bool hole_detection_enabled_;
     std::string hole_detection_algorithm_;
@@ -81,6 +85,14 @@ private:
     double hole_detection_range_y_;
     double hole_detection_max_height_;
     double hole_ground_tolerance_;
+    
+    // Obstacle detection range parameters (X, Y, Z PassThrough filter)
+    double obstacle_detection_range_x_min_;
+    double obstacle_detection_range_x_max_;
+    double obstacle_detection_range_y_min_;
+    double obstacle_detection_range_y_max_;
+    double obstacle_detection_range_z_min_;
+    double obstacle_detection_range_z_max_;
 
     // Ground plane and LiDAR origin for hole detection
     GroundPlane ground_plane_;

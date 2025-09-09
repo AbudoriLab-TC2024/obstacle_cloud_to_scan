@@ -19,16 +19,38 @@ pcl::PointCloud<pcl::PointXYZ>::Ptr downsamplePointCloud(
 
 pcl::PointCloud<pcl::PointXYZ>::Ptr applyPassThroughFilter(
     const pcl::PointCloud<pcl::PointXYZ>::Ptr &cloud,
-    const std::vector<double> &robot_box_size,
+    double x_min, double x_max,
+    double y_min, double y_max,
+    double z_min, double z_max,
     rclcpp::Logger logger)
 {
+    pcl::PointCloud<pcl::PointXYZ>::Ptr temp_cloud(new pcl::PointCloud<pcl::PointXYZ>);
+    pcl::PointCloud<pcl::PointXYZ>::Ptr temp_cloud2(new pcl::PointCloud<pcl::PointXYZ>);
     pcl::PointCloud<pcl::PointXYZ>::Ptr filtered_cloud(new pcl::PointCloud<pcl::PointXYZ>);
-    pcl::PassThrough<pcl::PointXYZ> pass;
-    pass.setInputCloud(cloud);
-    pass.setFilterFieldName("z");
-    pass.setFilterLimits(-1.0, robot_box_size[2] + 0.3);
-    pass.filter(*filtered_cloud);
-    RCLCPP_DEBUG(logger, "Passthrough filter applied");
+    
+    // X方向フィルタ
+    pcl::PassThrough<pcl::PointXYZ> pass_x;
+    pass_x.setInputCloud(cloud);
+    pass_x.setFilterFieldName("x");
+    pass_x.setFilterLimits(x_min, x_max);
+    pass_x.filter(*temp_cloud);
+    
+    // Y方向フィルタ
+    pcl::PassThrough<pcl::PointXYZ> pass_y;
+    pass_y.setInputCloud(temp_cloud);
+    pass_y.setFilterFieldName("y");
+    pass_y.setFilterLimits(y_min, y_max);
+    pass_y.filter(*temp_cloud2);
+    
+    // Z方向フィルタ
+    pcl::PassThrough<pcl::PointXYZ> pass_z;
+    pass_z.setInputCloud(temp_cloud2);
+    pass_z.setFilterFieldName("z");
+    pass_z.setFilterLimits(z_min, z_max);
+    pass_z.filter(*filtered_cloud);
+    
+    RCLCPP_DEBUG(logger, "Passthrough filter applied (X: %.1f~%.1f, Y: %.1f~%.1f, Z: %.1f~%.1f)", 
+                x_min, x_max, y_min, y_max, z_min, z_max);
 
     return filtered_cloud;
 }
@@ -95,6 +117,93 @@ pcl::PointCloud<pcl::Normal>::Ptr estimateNormals(
     return normals;
 }
 
+// 並列法線推定実装
+pcl::PointCloud<pcl::Normal>::Ptr estimateNormalsParallel(
+    const pcl::PointCloud<pcl::PointXYZ>::Ptr &cloud,
+    double normal_radius,
+    int num_threads,
+    rclcpp::Logger logger)
+{
+    // エラーハンドリング: CPUコア数チェック
+    int effective_threads = num_threads;
+    int max_threads = std::thread::hardware_concurrency();
+
+    if (max_threads == 0) {
+        RCLCPP_WARN(logger, "Cannot detect CPU core count, falling back to single thread mode");
+        effective_threads = 1;
+    } else if (num_threads <= 0) {
+        RCLCPP_WARN(logger, "Invalid thread count %d, using single thread", num_threads);
+        effective_threads = 1;
+    } else if (num_threads > max_threads) {
+        RCLCPP_WARN(logger, "Requested %d threads exceeds CPU cores (%d), limiting to %d threads", 
+                    num_threads, max_threads, max_threads);
+        effective_threads = max_threads;
+    }
+
+    if (effective_threads == 1) {
+        // シングルスレッドの場合は通常の関数を使用
+        return estimateNormals(cloud, normal_radius, logger);
+    }
+    
+    RCLCPP_DEBUG(logger, "Starting parallel normal estimation with %d threads for %zu points", 
+                effective_threads, cloud->size());
+    
+    // 結果格納用の法線点群を初期化
+    pcl::PointCloud<pcl::Normal>::Ptr normals(new pcl::PointCloud<pcl::Normal>);
+    normals->resize(cloud->size());
+    normals->width = cloud->width;
+    normals->height = cloud->height;
+    normals->is_dense = cloud->is_dense;
+    
+    // 点群を分割して各スレッドに割り当て
+    size_t points_per_thread = cloud->size() / effective_threads;
+    size_t remainder = cloud->size() % effective_threads;
+    
+    std::vector<std::future<void>> futures;
+    futures.reserve(effective_threads);
+    
+    for (int t = 0; t < effective_threads; ++t) {
+        size_t start_idx = t * points_per_thread;
+        size_t end_idx = (t == effective_threads - 1) ? start_idx + points_per_thread + remainder 
+                                                      : start_idx + points_per_thread;
+        
+        // 各スレッドで部分点群の法線推定を実行
+        auto future = std::async(std::launch::async, [=, &normals]() {
+            // 部分点群作成
+            pcl::PointCloud<pcl::PointXYZ>::Ptr sub_cloud(new pcl::PointCloud<pcl::PointXYZ>);
+            sub_cloud->points.assign(cloud->points.begin() + start_idx, 
+                                   cloud->points.begin() + end_idx);
+            sub_cloud->width = sub_cloud->points.size();
+            sub_cloud->height = 1;
+            sub_cloud->is_dense = true;
+            
+            // 部分点群の法線推定
+            pcl::PointCloud<pcl::Normal>::Ptr sub_normals(new pcl::PointCloud<pcl::Normal>);
+            pcl::NormalEstimation<pcl::PointXYZ, pcl::Normal> normal_estimation;
+            normal_estimation.setInputCloud(sub_cloud);
+            pcl::search::KdTree<pcl::PointXYZ>::Ptr tree(new pcl::search::KdTree<pcl::PointXYZ>);
+            normal_estimation.setSearchMethod(tree);
+            normal_estimation.setRadiusSearch(normal_radius);
+            normal_estimation.compute(*sub_normals);
+            
+            // 結果をメイン配列にコピー
+            for (size_t i = 0; i < sub_normals->size(); ++i) {
+                normals->points[start_idx + i] = sub_normals->points[i];
+            }
+        });
+        
+        futures.push_back(std::move(future));
+    }
+    
+    // 全スレッドの完了を待機
+    for (auto& future : futures) {
+        future.wait();
+    }
+    
+    RCLCPP_DEBUG(logger, "Parallel normal estimation completed");
+    return normals;
+}
+
 pcl::PointCloud<pcl::PointXYZ>::Ptr filterObstacles(
     const pcl::PointCloud<pcl::PointXYZ>::Ptr &cloud,
     const pcl::PointCloud<pcl::Normal>::Ptr &normals,
@@ -119,6 +228,97 @@ pcl::PointCloud<pcl::PointXYZ>::Ptr filterObstacles(
     }
     RCLCPP_DEBUG(logger, "Obstacle filtering completed");
 
+    return filtered_cloud;
+}
+
+// 並列障害物フィルタリング実装
+pcl::PointCloud<pcl::PointXYZ>::Ptr filterObstaclesParallel(
+    const pcl::PointCloud<pcl::PointXYZ>::Ptr &cloud,
+    const pcl::PointCloud<pcl::Normal>::Ptr &normals,
+    double max_slope_angle,
+    int num_threads,
+    rclcpp::Logger logger)
+{
+    // エラーハンドリング: CPUコア数チェック
+    int effective_threads = num_threads;
+    int max_threads = std::thread::hardware_concurrency();
+
+    if (max_threads == 0) {
+        RCLCPP_WARN(logger, "Cannot detect CPU core count, falling back to single thread mode");
+        effective_threads = 1;
+    } else if (num_threads <= 0) {
+        RCLCPP_WARN(logger, "Invalid thread count %d, using single thread", num_threads);
+        effective_threads = 1;
+    } else if (num_threads > max_threads) {
+        RCLCPP_WARN(logger, "Requested %d threads exceeds CPU cores (%d), limiting to %d threads", 
+                    num_threads, max_threads, max_threads);
+        effective_threads = max_threads;
+    }
+
+    if (effective_threads == 1) {
+        // シングルスレッドの場合は通常の関数を使用
+        return filterObstacles(cloud, normals, max_slope_angle, logger);
+    }
+    
+    RCLCPP_DEBUG(logger, "Starting parallel obstacle filtering with %d threads for %zu points", 
+                effective_threads, cloud->size());
+    
+    // スレッドセーフな結果収集用
+    std::vector<std::vector<size_t>> thread_results(effective_threads);
+    
+    // 点群を分割して各スレッドに割り当て
+    size_t points_per_thread = cloud->size() / effective_threads;
+    size_t remainder = cloud->size() % effective_threads;
+    
+    std::vector<std::future<void>> futures;
+    futures.reserve(effective_threads);
+    
+    for (int t = 0; t < effective_threads; ++t) {
+        size_t start_idx = t * points_per_thread;
+        size_t end_idx = (t == effective_threads - 1) ? start_idx + points_per_thread + remainder 
+                                                      : start_idx + points_per_thread;
+        
+        // 各スレッドで障害物フィルタリングを実行
+        auto future = std::async(std::launch::async, [=, &thread_results]() {
+            double angle = (90 - max_slope_angle) * M_PI / 180;
+            double threshold_normal_z = std::sin(angle);
+            
+            // このスレッドの処理範囲で障害物点のインデックスを収集
+            for (size_t i = start_idx; i < end_idx; ++i) {
+                const auto &normal = normals->points[i];
+                if (normal.normal_z <= threshold_normal_z && normal.normal_z >= -threshold_normal_z) {
+                    thread_results[t].push_back(i);
+                }
+            }
+        });
+        
+        futures.push_back(std::move(future));
+    }
+    
+    // 全スレッドの完了を待機
+    for (auto& future : futures) {
+        future.wait();
+    }
+    
+    // 結果を統合
+    pcl::PointCloud<pcl::PointXYZ>::Ptr filtered_cloud(new pcl::PointCloud<pcl::PointXYZ>);
+    size_t total_obstacles = 0;
+    for (const auto& result : thread_results) {
+        total_obstacles += result.size();
+    }
+    
+    filtered_cloud->reserve(total_obstacles);
+    for (const auto& result : thread_results) {
+        for (size_t idx : result) {
+            filtered_cloud->points.push_back(cloud->points[idx]);
+        }
+    }
+    
+    filtered_cloud->width = filtered_cloud->points.size();
+    filtered_cloud->height = 1;
+    filtered_cloud->is_dense = true;
+    
+    RCLCPP_DEBUG(logger, "Parallel obstacle filtering completed");
     return filtered_cloud;
 }
 
@@ -265,8 +465,11 @@ pcl::PointCloud<pcl::PointXYZ>::Ptr detectHolesBasic(
 void applyInPlaceFilteringPipeline(
     pcl::PointCloud<pcl::PointXYZ>::Ptr &cloud,
     double voxel_leaf_size,
-    const std::vector<double> &robot_box_size,
+    double obstacle_x_min, double obstacle_x_max,
+    double obstacle_y_min, double obstacle_y_max,
+    double obstacle_z_min, double obstacle_z_max,
     const std::vector<double> &robot_box_position,
+    const std::vector<double> &robot_box_size,
     rclcpp::Logger logger)
 {
     RCLCPP_DEBUG(logger, "Starting in-place filtering pipeline with %zu points", cloud->size());
@@ -274,8 +477,10 @@ void applyInPlaceFilteringPipeline(
     // Step 1: ダウンサンプリング (最も効果的な削減)
     downsamplePointCloudInPlace(cloud, voxel_leaf_size, logger);
     
-    // Step 2: パススルーフィルタ (高さ制限)
-    applyPassThroughFilterInPlace(cloud, robot_box_size, logger);
+    // Step 2: パススルーフィルタ (X,Y,Z方向障害物検知範囲制限)
+    applyPassThroughFilterInPlace(cloud, obstacle_x_min, obstacle_x_max, 
+                                  obstacle_y_min, obstacle_y_max,
+                                  obstacle_z_min, obstacle_z_max, logger);
     
     // Step 3: ロボット体除去
     removeRobotBodyInPlace(cloud, robot_box_position, robot_box_size, logger);
@@ -302,20 +507,36 @@ void downsamplePointCloudInPlace(
 
 void applyPassThroughFilterInPlace(
     pcl::PointCloud<pcl::PointXYZ>::Ptr &cloud,
-    const std::vector<double> &robot_box_size,
+    double x_min, double x_max,
+    double y_min, double y_max,
+    double z_min, double z_max,
     rclcpp::Logger logger)
 {
     size_t original_size = cloud->size();
     
-    pcl::PassThrough<pcl::PointXYZ> pass;
-    pass.setInputCloud(cloud);
-    pass.setFilterFieldName("z");
-    pass.setFilterLimits(-1.0, robot_box_size[2] + 0.3);
+    // X方向フィルタ
+    pcl::PassThrough<pcl::PointXYZ> pass_x;
+    pass_x.setInputCloud(cloud);
+    pass_x.setFilterFieldName("x");
+    pass_x.setFilterLimits(x_min, x_max);
+    pass_x.filter(*cloud);
     
-    // 同じポインタに結果を書き戻し
-    pass.filter(*cloud);
+    // Y方向フィルタ
+    pcl::PassThrough<pcl::PointXYZ> pass_y;
+    pass_y.setInputCloud(cloud);
+    pass_y.setFilterFieldName("y");
+    pass_y.setFilterLimits(y_min, y_max);
+    pass_y.filter(*cloud);
     
-    RCLCPP_DEBUG(logger, "In-place passthrough: %zu -> %zu points", original_size, cloud->size());
+    // Z方向フィルタ
+    pcl::PassThrough<pcl::PointXYZ> pass_z;
+    pass_z.setInputCloud(cloud);
+    pass_z.setFilterFieldName("z");
+    pass_z.setFilterLimits(z_min, z_max);
+    pass_z.filter(*cloud);
+    
+    RCLCPP_DEBUG(logger, "In-place passthrough: %zu -> %zu points (X: %.1f~%.1f, Y: %.1f~%.1f, Z: %.1f~%.1f)", 
+                original_size, cloud->size(), x_min, x_max, y_min, y_max, z_min, z_max);
 }
 
 void removeRobotBodyInPlace(
@@ -415,8 +636,11 @@ void applyTwoTierDownsampling(
 void applyHierarchicalFilteringPipeline(
     pcl::PointCloud<pcl::PointXYZ>::Ptr &cloud,
     double base_voxel_size,
-    const std::vector<double> &robot_box_size,
+    double obstacle_x_min, double obstacle_x_max,
+    double obstacle_y_min, double obstacle_y_max,
+    double obstacle_z_min, double obstacle_z_max,
     const std::vector<double> &robot_box_position,
+    const std::vector<double> &robot_box_size,
     double collision_distance_threshold,
     double far_zone_voxel_multiplier,
     rclcpp::Logger logger)
@@ -427,8 +651,10 @@ void applyHierarchicalFilteringPipeline(
     applyTwoTierDownsampling(cloud, base_voxel_size, collision_distance_threshold, 
                             far_zone_voxel_multiplier, logger);
     
-    // Step 2: パススルーフィルタ (高さ制限)
-    applyPassThroughFilterInPlace(cloud, robot_box_size, logger);
+    // Step 2: パススルーフィルタ (X,Y,Z方向障害物検知範囲制限)
+    applyPassThroughFilterInPlace(cloud, obstacle_x_min, obstacle_x_max, 
+                                  obstacle_y_min, obstacle_y_max,
+                                  obstacle_z_min, obstacle_z_max, logger);
     
     // Step 3: ロボット体除去
     removeRobotBodyInPlace(cloud, robot_box_position, robot_box_size, logger);
