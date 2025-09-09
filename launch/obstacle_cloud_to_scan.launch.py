@@ -22,12 +22,30 @@ def generate_launch_description():
                 'voxel_leaf_size': 0.1,
                 'robot_box_size': [0.9, 0.8, 1.0],
                 'robot_box_position': [0.0, 0.0, 0.0],
+                
+                # Obstacle detection range parameters (X, Y, Z PassThrough filter)
+                'obstacle_detection_range_x_min': -3.0,
+                'obstacle_detection_range_x_max': 3.0,
+                'obstacle_detection_range_y_min': -3.0,
+                'obstacle_detection_range_y_max': 3.0,
+                'obstacle_detection_range_z_min': -1.0,
+                'obstacle_detection_range_z_max': 1.3,  # Default: robot_box_size[2] + 0.3
                 'normal_max_slope_angle': 25.0,
                 'pmf_max_window_size': 33,
                 'pmf_slope': 1.0,
                 'pmf_initial_distance': 0.15,
                 'pmf_max_distance': 3.0,
                 'pmf_cell_size': 0.5,
+                
+                # Phase 2: Hierarchical filtering parameters (disabled by default for optimal performance)
+                'enable_hierarchical_filtering': False,  # Set to True for large-scale environments or safety-critical applications
+                'collision_distance_threshold': 3.0,    # Distance threshold for near/far classification (meters)
+                'far_zone_voxel_multiplier': 2.0,      # Voxel size multiplier for far zone (2.0 = 2x coarser)
+                
+                # Parallelization parameters (single thread by default for optimal performance)
+                'num_threads': 1,                       # 1=single thread, >1=parallel processing (e.g., 2-4 for multi-core)
+                'parallel_threshold_points': 1000,     # Minimum points to enable parallelization (avoid overhead for small clouds)
+                
                 # Hole detection parameters (disabled by default)
                 'hole_detection_enabled': False,
                 'hole_detection_algorithm': 'BASIC',

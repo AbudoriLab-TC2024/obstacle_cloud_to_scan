@@ -15,6 +15,8 @@
 #include <chrono>
 #include <numeric>
 #include <functional>
+#include <future>
+#include <thread>
 #include "obstacle_cloud_to_scan/obstacle_cloud_to_scan.hpp"
 
 
@@ -56,6 +58,14 @@
         this->declare_parameter<double>("voxel_leaf_size", 0.1);
         this->declare_parameter<std::vector<double>>("robot_box_size", {0.6, 0.6, 1.0});
         this->declare_parameter<std::vector<double>>("robot_box_position", {0.0, 0.0, 0.0});
+        
+        // Obstacle detection range parameters (X, Y, Z PassThrough filter)
+        this->declare_parameter<double>("obstacle_detection_range_x_min", -3.0);
+        this->declare_parameter<double>("obstacle_detection_range_x_max", 3.0);
+        this->declare_parameter<double>("obstacle_detection_range_y_min", -3.0);
+        this->declare_parameter<double>("obstacle_detection_range_y_max", 3.0);
+        this->declare_parameter<double>("obstacle_detection_range_z_min", -1.0);
+        this->declare_parameter<double>("obstacle_detection_range_z_max", 1.3);
         this->declare_parameter<double>("normal_max_slope_angle", 5.0);
         this->declare_parameter<double>("normal_radius", 0.6);
         this->declare_parameter<int>("pmf_max_window_size", 33);
@@ -63,6 +73,15 @@
         this->declare_parameter<double>("pmf_initial_distance", 0.15);
         this->declare_parameter<double>("pmf_max_distance", 3.0);
         this->declare_parameter<double>("pmf_cell_size", 0.5);
+
+        // Hierarchical filtering parameters
+        this->declare_parameter<bool>("enable_hierarchical_filtering", false);
+        this->declare_parameter<double>("collision_distance_threshold", 3.0);
+        this->declare_parameter<double>("far_zone_voxel_multiplier", 2.0);
+
+        // Parallelization parameters
+        this->declare_parameter<int>("num_threads", 1);                      // 1=single, >1=parallel
+        this->declare_parameter<int>("parallel_threshold_points", 1000);     // Minimum points for parallelization
 
         // Hole detection parameters
         this->declare_parameter<bool>("hole_detection_enabled", false);
@@ -85,6 +104,14 @@
         this->get_parameter("voxel_leaf_size", voxel_leaf_size_);
         this->get_parameter("robot_box_size", robot_box_size_);
         this->get_parameter("robot_box_position", robot_box_position_);
+        
+        // Obstacle detection range parameters
+        this->get_parameter("obstacle_detection_range_x_min", obstacle_detection_range_x_min_);
+        this->get_parameter("obstacle_detection_range_x_max", obstacle_detection_range_x_max_);
+        this->get_parameter("obstacle_detection_range_y_min", obstacle_detection_range_y_min_);
+        this->get_parameter("obstacle_detection_range_y_max", obstacle_detection_range_y_max_);
+        this->get_parameter("obstacle_detection_range_z_min", obstacle_detection_range_z_min_);
+        this->get_parameter("obstacle_detection_range_z_max", obstacle_detection_range_z_max_);
         this->get_parameter("normal_max_slope_angle", normal_max_slope_angle_);
         this->get_parameter("normal_radius", normal_radius_);
         this->get_parameter("pmf_max_window_size", pmf_max_window_size_);
@@ -92,6 +119,15 @@
         this->get_parameter("pmf_initial_distance", pmf_initial_distance_);
         this->get_parameter("pmf_max_distance", pmf_max_distance_);
         this->get_parameter("pmf_cell_size", pmf_cell_size_);
+
+        // Hierarchical filtering parameters
+        this->get_parameter("enable_hierarchical_filtering", enable_hierarchical_filtering_);
+        this->get_parameter("collision_distance_threshold", collision_distance_threshold_);
+        this->get_parameter("far_zone_voxel_multiplier", far_zone_voxel_multiplier_);
+
+        // Parallelization parameters
+        this->get_parameter("num_threads", num_threads_);
+        this->get_parameter("parallel_threshold_points", parallel_threshold_points_);
 
         // Hole detection parameters
         this->get_parameter("hole_detection_enabled", hole_detection_enabled_);
@@ -131,6 +167,15 @@
         RCLCPP_INFO(this->get_logger(), "pmf_max_distance: %f", pmf_max_distance_);
         RCLCPP_INFO(this->get_logger(), "pmf_cell_size: %f", pmf_cell_size_);
         
+        // Hierarchical filtering parameters log
+        RCLCPP_INFO(this->get_logger(), "enable_hierarchical_filtering: %s", enable_hierarchical_filtering_ ? "true" : "false");
+        RCLCPP_INFO(this->get_logger(), "collision_distance_threshold: %f", collision_distance_threshold_);
+        RCLCPP_INFO(this->get_logger(), "far_zone_voxel_multiplier: %f", far_zone_voxel_multiplier_);
+        
+        // Parallelization parameters log
+        RCLCPP_INFO(this->get_logger(), "num_threads: %d", num_threads_);
+        RCLCPP_INFO(this->get_logger(), "parallel_threshold_points: %d", parallel_threshold_points_);
+        
         // Hole detection parameters log
         RCLCPP_INFO(this->get_logger(), "hole_detection_enabled: %s", hole_detection_enabled_ ? "true" : "false");
         RCLCPP_INFO(this->get_logger(), "hole_detection_algorithm: %s", hole_detection_algorithm_.c_str());
@@ -145,8 +190,17 @@
     void ObstacleCloudToScanNode::pointCloudCallback(const sensor_msgs::msg::PointCloud2::SharedPtr msg)
     {
         auto callback_start_time = std::chrono::high_resolution_clock::now();
-        RCLCPP_DEBUG(this->get_logger(), "Received point cloud message");
+        RCLCPP_DEBUG(this->get_logger(), "=== Processing pipeline started ===");
+        RCLCPP_DEBUG(this->get_logger(), "Input cloud size: %u points", msg->width * msg->height);
 
+        // 時間計測変数の宣言
+        double tf_time_ms = 0.0;
+        double filtering_time_ms = 0.0;
+        auto filtering_start_time = callback_start_time;
+        auto filtering_end_time = callback_start_time;
+
+        // TF変換処理開始
+        auto tf_start_time = std::chrono::high_resolution_clock::now();
         geometry_msgs::msg::TransformStamped transform_stamped;
         try
         {
@@ -160,37 +214,58 @@
         }
         Eigen::Affine3d transform = tf2::transformToEigen(transform_stamped.transform);
 
+        // Phase 1: Memory-optimized pipeline
         pcl::PointCloud<pcl::PointXYZ>::Ptr cloud(new pcl::PointCloud<pcl::PointXYZ>);
         pcl::fromROSMsg(*msg, *cloud);
 
-        pcl::PointCloud<pcl::PointXYZ>::Ptr transformed_cloud(new pcl::PointCloud<pcl::PointXYZ>);
-        pcl::transformPointCloud(*cloud, *transformed_cloud, transform);
+        // TF変換を直接cloudに適用 (余計なコピーを削除)
+        pcl::transformPointCloud(*cloud, *cloud, transform);
 
-        auto tf_transforme_end_time = std::chrono::high_resolution_clock::now(); // 計測終了
+        auto tf_end_time = std::chrono::high_resolution_clock::now();
+        tf_time_ms = std::chrono::duration<double, std::milli>(tf_end_time - tf_start_time).count();
+        RCLCPP_DEBUG(this->get_logger(), "TF Transform: %.3f ms (%zu points)", tf_time_ms, cloud->size());
           
-        // ダウンサンプリング処理
-        RCLCPP_DEBUG(this->get_logger(), "Starting downsampling");
-        pcl::PointCloud<pcl::PointXYZ>::Ptr downsampled_cloud 
-            = downsamplePointCloud(transformed_cloud, voxel_leaf_size_, this->get_logger());
-        size_t num_downsampled_points = downsampled_cloud->points.size();
-        RCLCPP_DEBUG(this->get_logger(), "Downsampling completed");
+        // フィルタリングパイプライン選択
+        filtering_start_time = std::chrono::high_resolution_clock::now();
+        size_t original_points = cloud->size();
+        
+        if (enable_hierarchical_filtering_) {
+            // 近場は密に、遠くは疎にしてダウンサンプリング。点群数が超多いときにおすすめ
+            applyHierarchicalFilteringPipeline(cloud, voxel_leaf_size_, 
+                                              obstacle_detection_range_x_min_, obstacle_detection_range_x_max_,
+                                              obstacle_detection_range_y_min_, obstacle_detection_range_y_max_,
+                                              obstacle_detection_range_z_min_, obstacle_detection_range_z_max_,
+                                              robot_box_position_, robot_box_size_,
+                                              collision_distance_threshold_, far_zone_voxel_multiplier_, this->get_logger());
+            RCLCPP_DEBUG(this->get_logger(), "Hierarchical filtering enabled");
+        } else {
+            // 単一ダウンサンプリング。通常はこちらがおすすめ
+            applyInPlaceFilteringPipeline(cloud, voxel_leaf_size_, 
+                                        obstacle_detection_range_x_min_, obstacle_detection_range_x_max_,
+                                        obstacle_detection_range_y_min_, obstacle_detection_range_y_max_,
+                                        obstacle_detection_range_z_min_, obstacle_detection_range_z_max_,
+                                        robot_box_position_, robot_box_size_, this->get_logger());
+            RCLCPP_DEBUG(this->get_logger(), "Standard in-place filtering enabled");
+        }
+        
+        filtering_end_time = std::chrono::high_resolution_clock::now();
+        filtering_time_ms = std::chrono::duration<double, std::milli>(filtering_end_time - filtering_start_time).count();
+        size_t filtered_points = cloud->size();
+        
+        RCLCPP_DEBUG(this->get_logger(), "Filtering pipeline: %.3f ms (%zu -> %zu points, %.1f%% reduction)", 
+                    filtering_time_ms, original_points, filtered_points, 
+                    100.0 * (1.0 - static_cast<double>(filtered_points) / original_points));
 
-        // パススルーフィルタの適用
-        RCLCPP_DEBUG(this->get_logger(), "Starting passthrough filter");
-        pcl::PointCloud<pcl::PointXYZ>::Ptr passthrough_cloud 
-            = applyPassThroughFilter(downsampled_cloud, robot_box_size_, this->get_logger());
-        RCLCPP_DEBUG(this->get_logger(), "Passthrough filter completed");
-
-        // ロボットの体の除去
-        RCLCPP_DEBUG(this->get_logger(), "Removing robot body from point cloud");
-        pcl::PointCloud<pcl::PointXYZ>::Ptr body_removed_cloud 
-            = removeRobotBody(passthrough_cloud, robot_box_position_, robot_box_size_, this->get_logger());
-        RCLCPP_DEBUG(this->get_logger(), "Robot body removal completed");
+        // body_removed_cloudとして使用 (変数名互換性のため)
+        pcl::PointCloud<pcl::PointXYZ>::Ptr body_removed_cloud = cloud;
+        
+        // 統計情報収集用
+        size_t num_downsampled_points = filtered_points;
 
         pcl::PointCloud<pcl::PointXYZ>::Ptr filtered_cloud(new pcl::PointCloud<pcl::PointXYZ>);
 
-        // 障害物検知処理時間計測開始
-        auto obstacle_start_time = std::chrono::high_resolution_clock::now();
+        // 地面除去処理時間計測開始
+        auto ground_removal_start_time = std::chrono::high_resolution_clock::now();
 
         if (ground_remove_algorithm_ == "PMF") {
             RCLCPP_DEBUG(this->get_logger(), "Using PMF filter for ground segmentation.");
@@ -202,37 +277,76 @@
                 pmf_initial_distance_,
                 pmf_max_distance_,
                 pmf_cell_size_);
-            RCLCPP_DEBUG(this->get_logger(), "PMF filtering returned. Number of obstacle points: %zu", filtered_cloud ? filtered_cloud->size() : 0);
+            auto ground_removal_end_time = std::chrono::high_resolution_clock::now();
+            double ground_removal_time_ms = std::chrono::duration<double, std::milli>(ground_removal_end_time - ground_removal_start_time).count();
+            RCLCPP_DEBUG(this->get_logger(), "PMF ground removal: %.3f ms (%zu -> %zu points)", 
+                        ground_removal_time_ms, body_removed_cloud->size(), filtered_cloud ? filtered_cloud->size() : 0);
         } else {
-            RCLCPP_DEBUG(this->get_logger(), "Using original normal-based filter for ground segmentation.");
-            RCLCPP_DEBUG(this->get_logger(), "Starting normal estimation");
-            pcl::PointCloud<pcl::Normal>::Ptr normals = estimateNormals(body_removed_cloud, normal_radius_, this->get_logger());
-            RCLCPP_DEBUG(this->get_logger(), "Normal estimation completed");
+            RCLCPP_DEBUG(this->get_logger(), "Using normal-based filter for ground segmentation.");
+            
+            // 並列法線推定の時間計測
+            auto normal_start_time = std::chrono::high_resolution_clock::now();
+            pcl::PointCloud<pcl::Normal>::Ptr normals = estimateNormalsParallel(body_removed_cloud, normal_radius_, num_threads_, this->get_logger());
+            auto normal_end_time = std::chrono::high_resolution_clock::now();
+            double normal_time_ms = std::chrono::duration<double, std::milli>(normal_end_time - normal_start_time).count();
+            RCLCPP_DEBUG(this->get_logger(), "Normal estimation: %.3f ms (%zu points)", normal_time_ms, body_removed_cloud->size());
 
-            RCLCPP_DEBUG(this->get_logger(), "Starting obstacle filtering");
-            filtered_cloud = filterObstacles(body_removed_cloud, normals, normal_max_slope_angle_, this->get_logger());
-            RCLCPP_DEBUG(this->get_logger(), "Obstacle filtering completed. Number of obstacle points: %zu", filtered_cloud ? filtered_cloud->size() : 0);
+            // 並列障害物フィルタリングの時間計測
+            auto obstacle_filter_start_time = std::chrono::high_resolution_clock::now();
+            filtered_cloud = filterObstaclesParallel(body_removed_cloud, normals, normal_max_slope_angle_, num_threads_, this->get_logger());
+            auto obstacle_filter_end_time = std::chrono::high_resolution_clock::now();
+            double obstacle_filter_time_ms = std::chrono::duration<double, std::milli>(obstacle_filter_end_time - obstacle_filter_start_time).count();
+            RCLCPP_DEBUG(this->get_logger(), "Obstacle filtering: %.3f ms (%zu -> %zu points)", 
+                        obstacle_filter_time_ms, body_removed_cloud->size(), filtered_cloud ? filtered_cloud->size() : 0);
+            
+            auto ground_removal_end_time = std::chrono::high_resolution_clock::now();
+            double ground_removal_time_ms = std::chrono::duration<double, std::milli>(ground_removal_end_time - ground_removal_start_time).count();
+            RCLCPP_DEBUG(this->get_logger(), "Total normal-based ground removal: %.3f ms (Normal: %.3f ms + Filter: %.3f ms)", 
+                        ground_removal_time_ms, normal_time_ms, obstacle_filter_time_ms);
         }
 
-        // 障害物検知処理時間計測終了
+        // 障害物検知処理時間計測終了（互換性のため変数名維持）
         auto obstacle_end_time = std::chrono::high_resolution_clock::now();
-        double obstacle_processing_time_ms = std::chrono::duration<double, std::milli>(obstacle_end_time - obstacle_start_time).count();
+        double obstacle_processing_time_ms = std::chrono::duration<double, std::milli>(obstacle_end_time - ground_removal_start_time).count();
 
         // 地面平面初期化（初回のみ）
         if (!ground_plane_initialized_ && hole_detection_enabled_) {
             initializeGroundPlane();
         }
 
-        // 穴検知処理時間計測開始
-        auto hole_start_time = std::chrono::high_resolution_clock::now();
+        // 並列処理: 穴検知を別スレッドで実行
+        pcl::PointCloud<pcl::PointXYZ>::Ptr hole_cloud;
+        double hole_processing_time_ms = 0.0;
         
-        // 穴検知処理
-        pcl::PointCloud<pcl::PointXYZ>::Ptr hole_cloud = detectHoles(body_removed_cloud);
-        
-        // 穴検知処理時間計測終了
-        auto hole_end_time = std::chrono::high_resolution_clock::now();
-        double hole_processing_time_ms = std::chrono::duration<double, std::milli>(hole_end_time - hole_start_time).count();
+        if (num_threads_ > 1 && body_removed_cloud->size() > parallel_threshold_points_ && hole_detection_enabled_) {
+            // 並列実行: 穴検知を非同期で開始
+            RCLCPP_DEBUG(this->get_logger(), "Starting parallel hole detection with %d threads", num_threads_);
+            
+            auto hole_future = std::async(std::launch::async, [this, body_removed_cloud]() {
+                auto start_time = std::chrono::high_resolution_clock::now();
+                auto result = detectHoles(body_removed_cloud);
+                auto end_time = std::chrono::high_resolution_clock::now();
+                double time_ms = std::chrono::duration<double, std::milli>(end_time - start_time).count();
+                return std::make_pair(result, time_ms);
+            });
+            
+            // 並列実行の結果を取得
+            auto hole_result = hole_future.get();
+            hole_cloud = hole_result.first;
+            hole_processing_time_ms = hole_result.second;
+            RCLCPP_DEBUG(this->get_logger(), "Parallel hole detection completed: %.3f ms", hole_processing_time_ms);
+        } else {
+            // シーケンシャル実行
+            auto hole_start_time = std::chrono::high_resolution_clock::now();
+            hole_cloud = detectHoles(body_removed_cloud);
+            auto hole_end_time = std::chrono::high_resolution_clock::now();
+            hole_processing_time_ms = std::chrono::duration<double, std::milli>(hole_end_time - hole_start_time).count();
+            RCLCPP_DEBUG(this->get_logger(), "Sequential hole detection: %.3f ms", hole_processing_time_ms);
+        }
 
+        // パブリッシュ処理時間計測開始
+        auto publish_start_time = std::chrono::high_resolution_clock::now();
+        
         // 障害物点群をパブリッシュ
         RCLCPP_DEBUG(this->get_logger(), "Publishing filtered point cloud");
         sensor_msgs::msg::PointCloud2 filtered_msg;
@@ -258,8 +372,20 @@
             }
         }
         
+        auto publish_end_time = std::chrono::high_resolution_clock::now();
+        double publish_time_ms = std::chrono::duration<double, std::milli>(publish_end_time - publish_start_time).count();
+        RCLCPP_DEBUG(this->get_logger(), "Publishing: %.3f ms", publish_time_ms);
+        
         auto callback_end_time = std::chrono::high_resolution_clock::now();
         double total_processing_time_ms = std::chrono::duration<double, std::milli>(callback_end_time - callback_start_time).count();
+
+        // フィルタリング時間は既に計算済み
+        
+        // 総合計測結果表示
+        RCLCPP_DEBUG(this->get_logger(), "=== Processing pipeline completed ===");
+        RCLCPP_DEBUG(this->get_logger(), "Total processing: %.3f ms", total_processing_time_ms);
+        RCLCPP_DEBUG(this->get_logger(), "Pipeline breakdown: TF+Filter: %.3f ms | Ground: %.3f ms | Hole: %.3f ms | Publish: %.3f ms", 
+                    tf_time_ms + filtering_time_ms, obstacle_processing_time_ms, hole_processing_time_ms, publish_time_ms);
 
         { // Scope for lock guard
             std::lock_guard<std::mutex> lock(data_mutex_);
@@ -270,7 +396,6 @@
             obstacle_processing_times_.push_back(obstacle_processing_time_ms);
             hole_processing_times_.push_back(hole_processing_time_ms);
         }
-        RCLCPP_DEBUG(this->get_logger(), "PointCloud callback finished processing.");
     }
 
 void ObstacleCloudToScanNode::logPerformance()
