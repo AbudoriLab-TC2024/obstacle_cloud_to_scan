@@ -25,7 +25,6 @@ find_package(tf2_eigen REQUIRED)
 find_package(pcl_conversions REQUIRED)
 find_package(PCL REQUIRED)
 find_package(pointcloud_to_laserscan REQUIRED)
-find_package(yaml-cpp REQUIRED)
 
 # 実行ファイルの生成
 add_library(pcl_functions src/pcl_functions.cpp)
@@ -51,10 +50,6 @@ include_directories(
   ${pointcloud_to_laserscan_INCLUDE_DIRS}
 )
 
-# リンカ設定
-target_link_libraries(obstacle_cloud_to_scan ${PCL_LIBRARIES})
-target_link_libraries(${PROJECT_NAME} yaml-cpp)
-
 # インストール設定
 install(TARGETS
   obstacle_cloud_to_scan
@@ -62,11 +57,6 @@ install(TARGETS
   DESTINATION lib/${PROJECT_NAME})
 
 # launchディレクトリのインストール
-install(DIRECTORY 
-  launch
-  DESTINATION share/${PROJECT_NAME}/
-)
-
 install(DIRECTORY launch
   DESTINATION share/${PROJECT_NAME}/
 )

@@ -17,6 +17,7 @@
 #include <memory>
 #include <tf2_ros/buffer.h>
 #include <tf2_ros/transform_listener.h>
+#include "obstacle_cloud_to_scan/pcl_functions.hpp"
 
 class ObstacleCloudToScanNode : public rclcpp::Node
 {
@@ -54,13 +55,8 @@ private:
     std::vector<double> robot_box_position_;
     double normal_max_slope_angle_;
     double normal_radius_;
-    double scan_angle_min_;
-    double scan_angle_max_;
-    double scan_range_min_;
-    double scan_range_max_;
 
     // PMF Parameters
-    bool use_pmf_filter_;
     int pmf_max_window_size_;
     double pmf_slope_;
     double pmf_initial_distance_;

@@ -139,6 +139,42 @@
         this->get_parameter("hole_detection_max_height", hole_detection_max_height_);
         this->get_parameter("hole_ground_tolerance", hole_ground_tolerance_);
 
+        // Parameter validation
+        if (robot_box_size_.size() != 3) {
+            RCLCPP_ERROR(this->get_logger(), "robot_box_size must have exactly 3 elements (x, y, z). Got %zu elements.", robot_box_size_.size());
+            throw std::runtime_error("Invalid robot_box_size parameter");
+        }
+
+        if (robot_box_position_.size() != 3) {
+            RCLCPP_ERROR(this->get_logger(), "robot_box_position must have exactly 3 elements (x, y, z). Got %zu elements.", robot_box_position_.size());
+            throw std::runtime_error("Invalid robot_box_position parameter");
+        }
+
+        if (voxel_leaf_size_ <= 0.0) {
+            RCLCPP_ERROR(this->get_logger(), "voxel_leaf_size must be positive. Got %.3f", voxel_leaf_size_);
+            throw std::runtime_error("Invalid voxel_leaf_size parameter");
+        }
+
+        if (normal_radius_ <= 0.0) {
+            RCLCPP_ERROR(this->get_logger(), "normal_radius must be positive. Got %.3f", normal_radius_);
+            throw std::runtime_error("Invalid normal_radius parameter");
+        }
+
+        if (collision_distance_threshold_ <= 0.0) {
+            RCLCPP_ERROR(this->get_logger(), "collision_distance_threshold must be positive. Got %.3f", collision_distance_threshold_);
+            throw std::runtime_error("Invalid collision_distance_threshold parameter");
+        }
+
+        if (far_zone_voxel_multiplier_ <= 0.0) {
+            RCLCPP_ERROR(this->get_logger(), "far_zone_voxel_multiplier must be positive. Got %.3f", far_zone_voxel_multiplier_);
+            throw std::runtime_error("Invalid far_zone_voxel_multiplier parameter");
+        }
+
+        if (num_threads_ < 1) {
+            RCLCPP_WARN(this->get_logger(), "num_threads must be at least 1. Setting to 1. Got %d", num_threads_);
+            num_threads_ = 1;
+        }
+
         if (ground_remove_algorithm_ != "NORMAL" && ground_remove_algorithm_ != "PMF") {
             RCLCPP_WARN(this->get_logger(),
                 "ground_remove_algorithm must be 'NORMAL' or 'PMF'; using 'NORMAL' (got: '%s').",
@@ -277,9 +313,16 @@
                 pmf_initial_distance_,
                 pmf_max_distance_,
                 pmf_cell_size_);
+
+            // Check if PMF filter failed
+            if (!filtered_cloud || filtered_cloud->empty()) {
+                RCLCPP_WARN(this->get_logger(), "PMF filter returned empty cloud, using original cloud");
+                filtered_cloud = body_removed_cloud;
+            }
+
             auto ground_removal_end_time = std::chrono::high_resolution_clock::now();
             double ground_removal_time_ms = std::chrono::duration<double, std::milli>(ground_removal_end_time - ground_removal_start_time).count();
-            RCLCPP_DEBUG(this->get_logger(), "PMF ground removal: %.3f ms (%zu -> %zu points)", 
+            RCLCPP_DEBUG(this->get_logger(), "PMF ground removal: %.3f ms (%zu -> %zu points)",
                         ground_removal_time_ms, body_removed_cloud->size(), filtered_cloud ? filtered_cloud->size() : 0);
         } else {
             RCLCPP_DEBUG(this->get_logger(), "Using normal-based filter for ground segmentation.");

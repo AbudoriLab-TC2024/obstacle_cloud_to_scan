@@ -212,6 +212,14 @@ pcl::PointCloud<pcl::PointXYZ>::Ptr filterObstacles(
 {
     RCLCPP_DEBUG(logger, "Normal cloud size: %ld", cloud->points.size());
     RCLCPP_DEBUG(logger, "Max angle slope: %f", max_slope_angle);
+
+    // Validate input sizes match
+    if (cloud->points.size() != normals->points.size()) {
+        RCLCPP_ERROR(logger, "Cloud and normals size mismatch: %zu vs %zu",
+                    cloud->points.size(), normals->points.size());
+        return pcl::PointCloud<pcl::PointXYZ>::Ptr(new pcl::PointCloud<pcl::PointXYZ>);
+    }
+
     pcl::PointCloud<pcl::PointXYZ>::Ptr filtered_cloud(new pcl::PointCloud<pcl::PointXYZ>);
     for (size_t i = 0; i < cloud->points.size(); ++i)
     {
@@ -239,6 +247,13 @@ pcl::PointCloud<pcl::PointXYZ>::Ptr filterObstaclesParallel(
     int num_threads,
     rclcpp::Logger logger)
 {
+    // Validate input sizes match
+    if (cloud->points.size() != normals->points.size()) {
+        RCLCPP_ERROR(logger, "Cloud and normals size mismatch: %zu vs %zu",
+                    cloud->points.size(), normals->points.size());
+        return pcl::PointCloud<pcl::PointXYZ>::Ptr(new pcl::PointCloud<pcl::PointXYZ>);
+    }
+
     // エラーハンドリング: CPUコア数チェック
     int effective_threads = num_threads;
     int max_threads = std::thread::hardware_concurrency();
