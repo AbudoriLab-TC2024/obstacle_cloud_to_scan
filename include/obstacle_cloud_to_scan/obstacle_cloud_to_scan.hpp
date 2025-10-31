@@ -3,6 +3,7 @@
 
 #include <rclcpp/rclcpp.hpp>
 #include <sensor_msgs/msg/point_cloud2.hpp>
+#include <visualization_msgs/msg/marker.hpp>
 #include <pcl/point_cloud.h>
 #include <pcl/point_types.h>
 #include <pcl/filters/voxel_grid.h>
@@ -33,13 +34,17 @@ private:
     // Hole detection functions
     pcl::PointCloud<pcl::PointXYZ>::Ptr detectHoles(
         const pcl::PointCloud<pcl::PointXYZ>::Ptr &cloud);
-    
+
     // Ground plane initialization
     void initializeGroundPlane();
-  
+
+    // Ground plane visualization
+    void publishGroundPlaneVisualization(const GroundPlane &plane, const rclcpp::Time &stamp);
+
     rclcpp::Subscription<sensor_msgs::msg::PointCloud2>::SharedPtr point_cloud_subscriber_;
     rclcpp::Publisher<sensor_msgs::msg::PointCloud2>::SharedPtr filtered_cloud_publisher_;
     rclcpp::Publisher<sensor_msgs::msg::PointCloud2>::SharedPtr hole_cloud_publisher_;
+    rclcpp::Publisher<visualization_msgs::msg::Marker>::SharedPtr ground_plane_marker_publisher_;
 
     // TF2 members
     std::shared_ptr<tf2_ros::Buffer> tf_buffer_;
@@ -81,7 +86,20 @@ private:
     double hole_detection_range_y_;
     double hole_detection_max_height_;
     double hole_ground_tolerance_;
-    
+
+    // Dynamic Ground Plane Estimation Parameters
+    bool use_dynamic_ground_plane_;
+    double ground_plane_rolling_window_x_;
+    double ground_plane_rolling_window_y_;
+    double ground_plane_ransac_distance_threshold_;
+    int ground_plane_ransac_max_iterations_;
+    double hole_detection_height_buffer_;
+
+    // Ground Plane Visualization Parameters
+    bool visualize_ground_plane_;
+    std::string ground_plane_visualization_topic_;
+    double ground_plane_visualization_size_;
+
     // Obstacle detection range parameters (X, Y, Z PassThrough filter)
     double obstacle_detection_range_x_min_;
     double obstacle_detection_range_x_max_;

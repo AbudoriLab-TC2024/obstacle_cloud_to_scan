@@ -19,6 +19,7 @@ endif()
 find_package(ament_cmake REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(sensor_msgs REQUIRED)
+find_package(visualization_msgs REQUIRED)
 find_package(tf2_ros REQUIRED)
 find_package(tf2_sensor_msgs REQUIRED)
 find_package(tf2_eigen REQUIRED)
@@ -33,13 +34,14 @@ ament_target_dependencies(pcl_functions rclcpp PCL pointcloud_to_laserscan)
 
 add_executable(obstacle_cloud_to_scan src/obstacle_cloud_to_scan.cpp)
 target_link_libraries(obstacle_cloud_to_scan pcl_functions ${pointcloud_to_laserscan_LIBRARIES} ${PCL_LIBRARIES})
-ament_target_dependencies(obstacle_cloud_to_scan 
-    rclcpp 
-    tf2_ros 
-    tf2_sensor_msgs 
-    sensor_msgs 
-    PCL 
-    pcl_conversions 
+ament_target_dependencies(obstacle_cloud_to_scan
+    rclcpp
+    tf2_ros
+    tf2_sensor_msgs
+    sensor_msgs
+    visualization_msgs
+    PCL
+    pcl_conversions
     pointcloud_to_laserscan)
 
 # インクルードディレクトリの追加

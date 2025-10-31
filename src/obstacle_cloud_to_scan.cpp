@@ -47,6 +47,9 @@
 
         hole_cloud_publisher_ = this->create_publisher<sensor_msgs::msg::PointCloud2>(hole_output_topic_, sensor_qos);
         RCLCPP_DEBUG(this->get_logger(), "Hole cloud publisher created for topic: %s", hole_output_topic_.c_str());
+
+        ground_plane_marker_publisher_ = this->create_publisher<visualization_msgs::msg::Marker>(ground_plane_visualization_topic_, 10);
+        RCLCPP_DEBUG(this->get_logger(), "Ground plane marker publisher created for topic: %s", ground_plane_visualization_topic_.c_str());
     }
 
     void ObstacleCloudToScanNode::declare_parameters()
@@ -93,6 +96,19 @@
         this->declare_parameter<double>("hole_detection_max_height", 0.3);
         this->declare_parameter<double>("hole_ground_tolerance", 0.05);
 
+        // Dynamic ground plane estimation parameters
+        this->declare_parameter<bool>("use_dynamic_ground_plane", true);
+        this->declare_parameter<double>("ground_plane_rolling_window_x", 4.0);
+        this->declare_parameter<double>("ground_plane_rolling_window_y", 6.0);
+        this->declare_parameter<double>("ground_plane_ransac_distance_threshold", 0.05);
+        this->declare_parameter<int>("ground_plane_ransac_max_iterations", 100);
+        this->declare_parameter<double>("hole_detection_height_buffer", 0.1);
+
+        // Ground plane visualization parameters
+        this->declare_parameter<bool>("visualize_ground_plane", false);
+        this->declare_parameter<std::string>("ground_plane_visualization_topic", "/ground_plane_marker");
+        this->declare_parameter<double>("ground_plane_visualization_size", 5.0);
+
     }
 
     void ObstacleCloudToScanNode::get_parameters()
@@ -138,6 +154,14 @@
         this->get_parameter("hole_detection_range_y", hole_detection_range_y_);
         this->get_parameter("hole_detection_max_height", hole_detection_max_height_);
         this->get_parameter("hole_ground_tolerance", hole_ground_tolerance_);
+
+        // Dynamic ground plane estimation parameters
+        this->get_parameter("use_dynamic_ground_plane", use_dynamic_ground_plane_);
+        this->get_parameter("ground_plane_rolling_window_x", ground_plane_rolling_window_x_);
+        this->get_parameter("ground_plane_rolling_window_y", ground_plane_rolling_window_y_);
+        this->get_parameter("ground_plane_ransac_distance_threshold", ground_plane_ransac_distance_threshold_);
+        this->get_parameter("ground_plane_ransac_max_iterations", ground_plane_ransac_max_iterations_);
+        this->get_parameter("hole_detection_height_buffer", hole_detection_height_buffer_);
 
         // Parameter validation
         if (robot_box_size_.size() != 3) {
@@ -221,6 +245,24 @@
         RCLCPP_INFO(this->get_logger(), "hole_detection_range_y: %f", hole_detection_range_y_);
         RCLCPP_INFO(this->get_logger(), "hole_detection_max_height: %f", hole_detection_max_height_);
         RCLCPP_INFO(this->get_logger(), "hole_ground_tolerance: %f", hole_ground_tolerance_);
+
+        // Dynamic ground plane estimation parameters log
+        RCLCPP_INFO(this->get_logger(), "use_dynamic_ground_plane: %s", use_dynamic_ground_plane_ ? "true" : "false");
+        RCLCPP_INFO(this->get_logger(), "ground_plane_rolling_window_x: %f", ground_plane_rolling_window_x_);
+        RCLCPP_INFO(this->get_logger(), "ground_plane_rolling_window_y: %f", ground_plane_rolling_window_y_);
+        RCLCPP_INFO(this->get_logger(), "ground_plane_ransac_distance_threshold: %f", ground_plane_ransac_distance_threshold_);
+        RCLCPP_INFO(this->get_logger(), "ground_plane_ransac_max_iterations: %d", ground_plane_ransac_max_iterations_);
+        RCLCPP_INFO(this->get_logger(), "hole_detection_height_buffer: %f", hole_detection_height_buffer_);
+
+        // Ground plane visualization parameters
+        this->get_parameter("visualize_ground_plane", visualize_ground_plane_);
+        this->get_parameter("ground_plane_visualization_topic", ground_plane_visualization_topic_);
+        this->get_parameter("ground_plane_visualization_size", ground_plane_visualization_size_);
+
+        // Ground plane visualization parameters log
+        RCLCPP_INFO(this->get_logger(), "visualize_ground_plane: %s", visualize_ground_plane_ ? "true" : "false");
+        RCLCPP_INFO(this->get_logger(), "ground_plane_visualization_topic: %s", ground_plane_visualization_topic_.c_str());
+        RCLCPP_INFO(this->get_logger(), "ground_plane_visualization_size: %f", ground_plane_visualization_size_);
     }
 
     void ObstacleCloudToScanNode::pointCloudCallback(const sensor_msgs::msg::PointCloud2::SharedPtr msg)
@@ -299,14 +341,19 @@
         size_t num_downsampled_points = filtered_points;
 
         pcl::PointCloud<pcl::PointXYZ>::Ptr filtered_cloud(new pcl::PointCloud<pcl::PointXYZ>);
+        pcl::PointCloud<pcl::PointXYZ>::Ptr ground_cloud(new pcl::PointCloud<pcl::PointXYZ>);
 
         // 地面除去処理時間計測開始
         auto ground_removal_start_time = std::chrono::high_resolution_clock::now();
 
         if (ground_remove_algorithm_ == "PMF") {
             RCLCPP_DEBUG(this->get_logger(), "Using PMF filter for ground segmentation.");
-            filtered_cloud = applyProgressiveMorphologicalFilter(
+
+            // PMFで障害物点と地面点の両方を取得
+            bool pmf_success = applyProgressiveMorphologicalFilterWithGround(
                 body_removed_cloud,
+                filtered_cloud,
+                ground_cloud,
                 this->get_logger(),
                 pmf_max_window_size_,
                 pmf_slope_,
@@ -314,19 +361,21 @@
                 pmf_max_distance_,
                 pmf_cell_size_);
 
-            // Check if PMF filter failed
-            if (!filtered_cloud || filtered_cloud->empty()) {
-                RCLCPP_WARN(this->get_logger(), "PMF filter returned empty cloud, using original cloud");
+            // PMF失敗時の処理
+            if (!pmf_success || filtered_cloud->empty()) {
+                RCLCPP_WARN(this->get_logger(), "PMFフィルタが失敗、元の点群を使用");
                 filtered_cloud = body_removed_cloud;
+                ground_cloud->clear();  // 地面点も空にする
             }
 
             auto ground_removal_end_time = std::chrono::high_resolution_clock::now();
             double ground_removal_time_ms = std::chrono::duration<double, std::milli>(ground_removal_end_time - ground_removal_start_time).count();
-            RCLCPP_DEBUG(this->get_logger(), "PMF ground removal: %.3f ms (%zu -> %zu points)",
-                        ground_removal_time_ms, body_removed_cloud->size(), filtered_cloud ? filtered_cloud->size() : 0);
+            RCLCPP_DEBUG(this->get_logger(), "PMF地面除去: %.3f ms (%zu -> 障害物%zu点, 地面%zu点)",
+                        ground_removal_time_ms, body_removed_cloud->size(),
+                        filtered_cloud->size(), ground_cloud->size());
         } else {
             RCLCPP_DEBUG(this->get_logger(), "Using normal-based filter for ground segmentation.");
-            
+
             // 並列法線推定の時間計測
             auto normal_start_time = std::chrono::high_resolution_clock::now();
             pcl::PointCloud<pcl::Normal>::Ptr normals = estimateNormalsParallel(body_removed_cloud, normal_radius_, num_threads_, this->get_logger());
@@ -334,27 +383,88 @@
             double normal_time_ms = std::chrono::duration<double, std::milli>(normal_end_time - normal_start_time).count();
             RCLCPP_DEBUG(this->get_logger(), "Normal estimation: %.3f ms (%zu points)", normal_time_ms, body_removed_cloud->size());
 
-            // 並列障害物フィルタリングの時間計測
-            auto obstacle_filter_start_time = std::chrono::high_resolution_clock::now();
-            filtered_cloud = filterObstaclesParallel(body_removed_cloud, normals, normal_max_slope_angle_, num_threads_, this->get_logger());
-            auto obstacle_filter_end_time = std::chrono::high_resolution_clock::now();
-            double obstacle_filter_time_ms = std::chrono::duration<double, std::milli>(obstacle_filter_end_time - obstacle_filter_start_time).count();
-            RCLCPP_DEBUG(this->get_logger(), "Obstacle filtering: %.3f ms (%zu -> %zu points)", 
-                        obstacle_filter_time_ms, body_removed_cloud->size(), filtered_cloud ? filtered_cloud->size() : 0);
-            
+            // 並列障害物/地面フィルタリング（両方を同時に取得）
+            auto filter_start_time = std::chrono::high_resolution_clock::now();
+            bool filter_success = filterObstaclesParallelWithGround(
+                body_removed_cloud,
+                normals,
+                filtered_cloud,
+                ground_cloud,
+                normal_max_slope_angle_,
+                num_threads_,
+                this->get_logger());
+
+            if (!filter_success || filtered_cloud->empty()) {
+                RCLCPP_WARN(this->get_logger(), "法線ベースフィルタが失敗、元の点群を使用");
+                filtered_cloud = body_removed_cloud;
+                ground_cloud->clear();  // 地面点も空にする
+            }
+
+            auto filter_end_time = std::chrono::high_resolution_clock::now();
+            double filter_time_ms = std::chrono::duration<double, std::milli>(filter_end_time - filter_start_time).count();
+
             auto ground_removal_end_time = std::chrono::high_resolution_clock::now();
             double ground_removal_time_ms = std::chrono::duration<double, std::milli>(ground_removal_end_time - ground_removal_start_time).count();
-            RCLCPP_DEBUG(this->get_logger(), "Total normal-based ground removal: %.3f ms (Normal: %.3f ms + Filter: %.3f ms)", 
-                        ground_removal_time_ms, normal_time_ms, obstacle_filter_time_ms);
+            RCLCPP_DEBUG(this->get_logger(), "Total normal-based ground removal: %.3f ms (Normal: %.3f ms + Filter: %.3f ms, 障害物%zu点, 地面%zu点)",
+                        ground_removal_time_ms, normal_time_ms, filter_time_ms,
+                        filtered_cloud->size(), ground_cloud->size());
         }
 
         // 障害物検知処理時間計測終了（互換性のため変数名維持）
         auto obstacle_end_time = std::chrono::high_resolution_clock::now();
         double obstacle_processing_time_ms = std::chrono::duration<double, std::milli>(obstacle_end_time - ground_removal_start_time).count();
 
-        // 地面平面初期化（初回のみ）
-        if (!ground_plane_initialized_ && hole_detection_enabled_) {
-            initializeGroundPlane();
+        // 地面平面推定（穴検知が有効な場合のみ）
+        if (hole_detection_enabled_) {
+            if (use_dynamic_ground_plane_) {
+                // 動的地面平面推定（RANSAC）
+                if (!ground_cloud->empty()) {
+                    // Rolling window内の地面点をフィルタ
+                    auto window_ground = filterRollingWindow(
+                        ground_cloud,
+                        ground_plane_rolling_window_x_,
+                        ground_plane_rolling_window_y_,
+                        this->get_logger());
+
+                    // RANSAC平面推定
+                    if (window_ground && !window_ground->empty()) {
+                        bool ransac_success = estimateGroundPlaneRANSAC(
+                            window_ground,
+                            ground_plane_,
+                            ground_plane_ransac_distance_threshold_,
+                            ground_plane_ransac_max_iterations_,
+                            this->get_logger());
+
+                        if (ransac_success) {
+                            ground_plane_initialized_ = true;
+                            RCLCPP_DEBUG(this->get_logger(), "動的地面平面推定成功");
+
+                            // 地面平面を可視化
+                            publishGroundPlaneVisualization(ground_plane_, msg->header.stamp);
+                        } else {
+                            RCLCPP_WARN(this->get_logger(), "RANSAC平面推定失敗、静的平面にフォールバック");
+                            if (!ground_plane_initialized_) {
+                                initializeGroundPlane();
+                            }
+                        }
+                    } else {
+                        RCLCPP_WARN(this->get_logger(), "Rolling window内の地面点が空、静的平面にフォールバック");
+                        if (!ground_plane_initialized_) {
+                            initializeGroundPlane();
+                        }
+                    }
+                } else {
+                    RCLCPP_WARN(this->get_logger(), "地面点が空、静的平面にフォールバック");
+                    if (!ground_plane_initialized_) {
+                        initializeGroundPlane();
+                    }
+                }
+            } else {
+                // 静的地面平面推定（z=0平面、初回のみ）
+                if (!ground_plane_initialized_) {
+                    initializeGroundPlane();
+                }
+            }
         }
 
         // 並列処理: 穴検知を別スレッドで実行
@@ -549,27 +659,20 @@ pcl::PointCloud<pcl::PointXYZ>::Ptr ObstacleCloudToScanNode::detectHoles(
         hole_detection_max_height_,
         this->get_logger());
     
-    // 穴検知アルゴリズムを実行
-    if (hole_detection_algorithm_ == "BASIC") {
-        RCLCPP_DEBUG(this->get_logger(), "Using BASIC hole detection algorithm");
-        hole_cloud = detectHolesBasic(
+    // 穴検知を実行
+    if (use_dynamic_ground_plane_) {
+        // 動的地面平面推定使用時：高さチェック付き穴検知
+        RCLCPP_DEBUG(this->get_logger(), "穴検知実行（動的地面平面、高さチェック付き）");
+        hole_cloud = detectHolesBasicWithHeightCheck(
             filtered_cloud,
             lidar_origin_,
             ground_plane_,
             hole_ground_tolerance_,
-            this->get_logger());
-    } else if (hole_detection_algorithm_ == "GRID") {
-        RCLCPP_DEBUG(this->get_logger(), "GRID algorithm not yet implemented, using BASIC");
-        hole_cloud = detectHolesBasic(
-            filtered_cloud,
-            lidar_origin_,
-            ground_plane_,
-            hole_ground_tolerance_,
+            hole_detection_height_buffer_,
             this->get_logger());
     } else {
-        // 不正な値の場合はBASICをデフォルトとして使用
-        RCLCPP_DEBUG(this->get_logger(), "Unknown algorithm '%s', using BASIC as default", 
-                    hole_detection_algorithm_.c_str());
+        // 静的地面平面使用時：従来の穴検知
+        RCLCPP_DEBUG(this->get_logger(), "穴検知実行（静的地面平面）");
         hole_cloud = detectHolesBasic(
             filtered_cloud,
             lidar_origin_,
@@ -579,6 +682,127 @@ pcl::PointCloud<pcl::PointXYZ>::Ptr ObstacleCloudToScanNode::detectHoles(
     }
     
     return hole_cloud;
+}
+
+void ObstacleCloudToScanNode::publishGroundPlaneVisualization(const GroundPlane &plane, const rclcpp::Time &stamp)
+{
+    if (!visualize_ground_plane_) {
+        return;
+    }
+
+    visualization_msgs::msg::Marker marker;
+    marker.header.frame_id = target_frame_;
+    marker.header.stamp = stamp;
+    marker.ns = "ground_plane";
+    marker.id = 0;
+    marker.type = visualization_msgs::msg::Marker::TRIANGLE_LIST;
+    marker.action = visualization_msgs::msg::Marker::ADD;
+
+    // 平面方程式: ax + by + cz + d = 0
+    // 法線ベクトル: (a, b, c)
+    double a = plane.a;
+    double b = plane.b;
+    double c = plane.c;
+    double d = plane.d;
+
+    // 法線ベクトルの正規化
+    double norm = std::sqrt(a*a + b*b + c*c);
+    if (norm < 1e-6) {
+        RCLCPP_WARN(this->get_logger(), "地面平面の法線ベクトルがゼロに近い、可視化をスキップ");
+        return;
+    }
+    a /= norm;
+    b /= norm;
+    c /= norm;
+    d /= norm;
+
+    // 原点から平面への最短距離の点を計算（平面上の基準点）
+    // P0 = -d * (a, b, c)
+    double p0_x = -d * a;
+    double p0_y = -d * b;
+    double p0_z = -d * c;
+
+    // 平面上の2つの直交する方向ベクトルを計算
+    // v1は法線に垂直なベクトル
+    double v1_x, v1_y, v1_z;
+    if (std::abs(c) > 0.1) {
+        // z成分が大きい場合、x軸方向のベクトルを基準にする
+        v1_x = 1.0;
+        v1_y = 0.0;
+        v1_z = -(a * v1_x + b * v1_y) / c;
+    } else if (std::abs(b) > 0.1) {
+        // y成分が大きい場合、x軸方向のベクトルを基準にする
+        v1_x = 1.0;
+        v1_y = -(a * v1_x + c * 0.0) / b;
+        v1_z = 0.0;
+    } else {
+        // x成分が大きい場合、y軸方向のベクトルを基準にする
+        v1_x = 0.0;
+        v1_y = 1.0;
+        v1_z = -(b * v1_y) / a;
+    }
+
+    // v1を正規化
+    double v1_norm = std::sqrt(v1_x*v1_x + v1_y*v1_y + v1_z*v1_z);
+    v1_x /= v1_norm;
+    v1_y /= v1_norm;
+    v1_z /= v1_norm;
+
+    // v2 = 法線 × v1 (外積)
+    double v2_x = b * v1_z - c * v1_y;
+    double v2_y = c * v1_x - a * v1_z;
+    double v2_z = a * v1_y - b * v1_x;
+
+    // 矩形の4つの頂点を計算
+    double size = ground_plane_visualization_size_;
+    double half_size = size / 2.0;
+
+    geometry_msgs::msg::Point p1, p2, p3, p4;
+
+    // 頂点1: p0 + half_size*v1 + half_size*v2
+    p1.x = p0_x + half_size * v1_x + half_size * v2_x;
+    p1.y = p0_y + half_size * v1_y + half_size * v2_y;
+    p1.z = p0_z + half_size * v1_z + half_size * v2_z;
+
+    // 頂点2: p0 - half_size*v1 + half_size*v2
+    p2.x = p0_x - half_size * v1_x + half_size * v2_x;
+    p2.y = p0_y - half_size * v1_y + half_size * v2_y;
+    p2.z = p0_z - half_size * v1_z + half_size * v2_z;
+
+    // 頂点3: p0 - half_size*v1 - half_size*v2
+    p3.x = p0_x - half_size * v1_x - half_size * v2_x;
+    p3.y = p0_y - half_size * v1_y - half_size * v2_y;
+    p3.z = p0_z - half_size * v1_z - half_size * v2_z;
+
+    // 頂点4: p0 + half_size*v1 - half_size*v2
+    p4.x = p0_x + half_size * v1_x - half_size * v2_x;
+    p4.y = p0_y + half_size * v1_y - half_size * v2_y;
+    p4.z = p0_z + half_size * v1_z - half_size * v2_z;
+
+    // 矩形を2つの三角形で表現
+    // 三角形1: p1, p2, p3
+    marker.points.push_back(p1);
+    marker.points.push_back(p2);
+    marker.points.push_back(p3);
+
+    // 三角形2: p1, p3, p4
+    marker.points.push_back(p1);
+    marker.points.push_back(p3);
+    marker.points.push_back(p4);
+
+    // 色設定（半透明の緑色）
+    marker.scale.x = 1.0;
+    marker.scale.y = 1.0;
+    marker.scale.z = 1.0;
+    marker.color.r = 0.0;
+    marker.color.g = 1.0;
+    marker.color.b = 0.0;
+    marker.color.a = 0.5;  // 半透明
+
+    marker.lifetime = rclcpp::Duration::from_seconds(0.5);  // 0.5秒で消える
+
+    ground_plane_marker_publisher_->publish(marker);
+    RCLCPP_DEBUG(this->get_logger(), "地面平面可視化マーカーをパブリッシュ");
 }
 
 int main(int argc, char **argv)

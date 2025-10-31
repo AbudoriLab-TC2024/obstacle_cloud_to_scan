@@ -18,18 +18,18 @@ def generate_launch_description():
                 'target_frame': 'base_link',
                 'input_topic': '/livox/lidar',
                 'output_topic': '/cloud_in', # pointcloud_to_laserscanに入力
-                'ground_remove_algorithm': 'NORMAL',
+                'ground_remove_algorithm': 'PMF',
                 'voxel_leaf_size': 0.1,
-                'robot_box_size': [0.9, 0.8, 1.0],
+                'robot_box_size': [0.8, 0.5, 0.6],
                 'robot_box_position': [0.0, 0.0, 0.0],
                 
                 # Obstacle detection range parameters (X, Y, Z PassThrough filter)
-                'obstacle_detection_range_x_min': -3.0,
-                'obstacle_detection_range_x_max': 3.0,
-                'obstacle_detection_range_y_min': -3.0,
-                'obstacle_detection_range_y_max': 3.0,
+                'obstacle_detection_range_x_min': 0.4,
+                'obstacle_detection_range_x_max': 6.0,
+                'obstacle_detection_range_y_min': -6.0,
+                'obstacle_detection_range_y_max': 6.0,
                 'obstacle_detection_range_z_min': -1.0,
-                'obstacle_detection_range_z_max': 1.3,  # Default: robot_box_size[2] + 0.3
+                'obstacle_detection_range_z_max': 1.0,  # Default: robot_box_size[2] + 0.3
                 'normal_max_slope_angle': 25.0,
                 'pmf_max_window_size': 33,
                 'pmf_slope': 1.0,
@@ -47,14 +47,27 @@ def generate_launch_description():
                 'parallel_threshold_points': 1000,     # Minimum points to enable parallelization (avoid overhead for small clouds)
                 
                 # Hole detection parameters (disabled by default)
-                'hole_detection_enabled': False,
+                'hole_detection_enabled': True,
                 'hole_detection_algorithm': 'BASIC',
                 'hole_output_topic': '/hole_cloud/cloud',
                 'lidar_frame': 'livox_frame',
                 'hole_detection_range_x': 3.0,
                 'hole_detection_range_y': 5.0,
                 'hole_detection_max_height': 0.3,
-                'hole_ground_tolerance': 0.05
+                'hole_ground_tolerance': 0.05,
+
+                # Dynamic ground plane estimation parameters
+                'use_dynamic_ground_plane': True,
+                'ground_plane_rolling_window_x': 4.0,
+                'ground_plane_rolling_window_y': 6.0,
+                'ground_plane_ransac_distance_threshold': 0.05,
+                'ground_plane_ransac_max_iterations': 100,
+                'hole_detection_height_buffer': 0.1,
+
+                # Ground plane visualization parameters
+                'visualize_ground_plane': True,
+                'ground_plane_visualization_topic': '/ground_plane_marker',
+                'ground_plane_visualization_size': 5.0
             }],
         ),
         

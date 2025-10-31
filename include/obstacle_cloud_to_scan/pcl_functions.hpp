@@ -56,10 +56,20 @@ pcl::PointCloud<pcl::PointXYZ>::Ptr filterObstacles(
     double max_slope_angle,
     rclcpp::Logger logger);
 
-// 並列障害物フィルタリング  
+// 並列障害物フィルタリング
 pcl::PointCloud<pcl::PointXYZ>::Ptr filterObstaclesParallel(
     const pcl::PointCloud<pcl::PointXYZ>::Ptr &cloud,
     const pcl::PointCloud<pcl::Normal>::Ptr &normals,
+    double max_slope_angle,
+    int num_threads,
+    rclcpp::Logger logger);
+
+// 並列障害物フィルタリング（地面点と障害物点の両方を返す）
+bool filterObstaclesParallelWithGround(
+    const pcl::PointCloud<pcl::PointXYZ>::Ptr &cloud,
+    const pcl::PointCloud<pcl::Normal>::Ptr &normals,
+    pcl::PointCloud<pcl::PointXYZ>::Ptr &obstacle_cloud,
+    pcl::PointCloud<pcl::PointXYZ>::Ptr &ground_cloud,
     double max_slope_angle,
     int num_threads,
     rclcpp::Logger logger);
@@ -80,6 +90,18 @@ pcl::PointCloud<pcl::PointXYZ>::Ptr applyProgressiveMorphologicalFilter(
     double initial_distance,  // Changed from float to double
     double max_distance,      // Changed from float to double
     double cell_size);        // Changed from float to double
+
+// PMFによる地面除去（地面点と障害物点の両方を返す）
+bool applyProgressiveMorphologicalFilterWithGround(
+    const pcl::PointCloud<pcl::PointXYZ>::Ptr &cloud,
+    pcl::PointCloud<pcl::PointXYZ>::Ptr &obstacle_cloud,
+    pcl::PointCloud<pcl::PointXYZ>::Ptr &ground_cloud,
+    rclcpp::Logger logger,
+    int max_window_size,
+    double slope,
+    double initial_distance,
+    double max_distance,
+    double cell_size);
 
 // 穴検知用フィルタ
 pcl::PointCloud<pcl::PointXYZ>::Ptr filterHoleDetectionRange(
@@ -102,6 +124,34 @@ pcl::PointCloud<pcl::PointXYZ>::Ptr detectHolesBasic(
     const pcl::PointXYZ &lidar_origin,
     const GroundPlane &ground_plane,
     double ground_tolerance,
+    rclcpp::Logger logger);
+
+// ===============================================
+// 動的地面平面推定関数群
+// ===============================================
+
+// Rolling window範囲フィルタ
+pcl::PointCloud<pcl::PointXYZ>::Ptr filterRollingWindow(
+    const pcl::PointCloud<pcl::PointXYZ>::Ptr &cloud,
+    double window_x,  // 前方距離
+    double window_y,  // 横幅（±window_y/2）
+    rclcpp::Logger logger);
+
+// RANSAC地面平面推定
+bool estimateGroundPlaneRANSAC(
+    const pcl::PointCloud<pcl::PointXYZ>::Ptr &ground_cloud,
+    GroundPlane &plane,
+    double distance_threshold,
+    int max_iterations,
+    rclcpp::Logger logger);
+
+// 高さチェック付き基本穴検知（改善版）
+pcl::PointCloud<pcl::PointXYZ>::Ptr detectHolesBasicWithHeightCheck(
+    const pcl::PointCloud<pcl::PointXYZ>::Ptr &cloud,
+    const pcl::PointXYZ &lidar_origin,
+    const GroundPlane &ground_plane,
+    double ground_tolerance,
+    double height_buffer,  // 地面より高い点のスキップバッファ
     rclcpp::Logger logger);
 
 // ===============================================
