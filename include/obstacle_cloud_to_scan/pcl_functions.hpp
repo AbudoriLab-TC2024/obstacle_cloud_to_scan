@@ -8,8 +8,6 @@
 #include <pcl/filters/crop_box.h>
 #include <pcl/features/normal_3d.h>
 #include <rclcpp/rclcpp.hpp>
-#include <future>
-#include <thread>
 
 // 地面平面の定義（平面方程式: ax + by + cz + d = 0）
 struct GroundPlane {
@@ -22,63 +20,19 @@ struct GroundPlane {
     }
 };
 
-// ダウンサンプリング
-pcl::PointCloud<pcl::PointXYZ>::Ptr downsamplePointCloud(
-    const pcl::PointCloud<pcl::PointXYZ>::Ptr &cloud,
-    double voxel_leaf_size,
-    rclcpp::Logger logger);
-
-// パススルーフィルタ
-pcl::PointCloud<pcl::PointXYZ>::Ptr applyPassThroughFilter(
-    const pcl::PointCloud<pcl::PointXYZ>::Ptr &cloud,
-    double x_min, double x_max,
-    double y_min, double y_max,
-    double z_min, double z_max,
-    rclcpp::Logger logger);
-
 // 法線推定
 pcl::PointCloud<pcl::Normal>::Ptr estimateNormals(
     const pcl::PointCloud<pcl::PointXYZ>::Ptr &cloud,
     double normal_radius,
     rclcpp::Logger logger);
 
-// 並列法線推定
-pcl::PointCloud<pcl::Normal>::Ptr estimateNormalsParallel(
-    const pcl::PointCloud<pcl::PointXYZ>::Ptr &cloud,
-    double normal_radius,
-    int num_threads,
-    rclcpp::Logger logger);
-
-// 法線から障害物を割り出し
-pcl::PointCloud<pcl::PointXYZ>::Ptr filterObstacles(
-    const pcl::PointCloud<pcl::PointXYZ>::Ptr &cloud,
-    const pcl::PointCloud<pcl::Normal>::Ptr &normals,
-    double max_slope_angle,
-    rclcpp::Logger logger);
-
-// 並列障害物フィルタリング
-pcl::PointCloud<pcl::PointXYZ>::Ptr filterObstaclesParallel(
-    const pcl::PointCloud<pcl::PointXYZ>::Ptr &cloud,
-    const pcl::PointCloud<pcl::Normal>::Ptr &normals,
-    double max_slope_angle,
-    int num_threads,
-    rclcpp::Logger logger);
-
-// 並列障害物フィルタリング（地面点と障害物点の両方を返す）
-bool filterObstaclesParallelWithGround(
+// 障害物フィルタリング（地面点と障害物点の両方を返す）
+bool filterObstaclesWithGround(
     const pcl::PointCloud<pcl::PointXYZ>::Ptr &cloud,
     const pcl::PointCloud<pcl::Normal>::Ptr &normals,
     pcl::PointCloud<pcl::PointXYZ>::Ptr &obstacle_cloud,
     pcl::PointCloud<pcl::PointXYZ>::Ptr &ground_cloud,
     double max_slope_angle,
-    int num_threads,
-    rclcpp::Logger logger);
-
-// ロボット自身のポイントクラウドを除去
-pcl::PointCloud<pcl::PointXYZ>::Ptr removeRobotBody(
-    const pcl::PointCloud<pcl::PointXYZ>::Ptr &cloud,
-    const std::vector<double> &box_position,
-    const std::vector<double> &box_size,
     rclcpp::Logger logger);
 
 // PMFによる地面除去
@@ -189,34 +143,6 @@ void removeRobotBodyInPlace(
     pcl::PointCloud<pcl::PointXYZ>::Ptr &cloud,
     const std::vector<double> &box_position,
     const std::vector<double> &box_size,
-    rclcpp::Logger logger);
-
-// ===============================================
-// Phase 2: Two-tier distance-based filtering
-// ===============================================
-
-// 点から原点までの距離計算
-double calculateDistance(const pcl::PointXYZ &point, const pcl::PointXYZ &origin = pcl::PointXYZ(0,0,0));
-
-// 2段階階層ダウンサンプリング（近距離=高精度、遠距離=低精度）
-void applyTwoTierDownsampling(
-    pcl::PointCloud<pcl::PointXYZ>::Ptr &cloud,
-    double base_voxel_size,
-    double collision_distance_threshold,  // デフォルト3.0m
-    double far_zone_voxel_multiplier,     // デフォルト2.0 (遠方は2倍粗く)
-    rclcpp::Logger logger);
-
-// 距離ベース階層フィルタリング統合パイプライン
-void applyHierarchicalFilteringPipeline(
-    pcl::PointCloud<pcl::PointXYZ>::Ptr &cloud,
-    double base_voxel_size,
-    double obstacle_x_min, double obstacle_x_max,
-    double obstacle_y_min, double obstacle_y_max,
-    double obstacle_z_min, double obstacle_z_max,
-    const std::vector<double> &robot_box_position,
-    const std::vector<double> &robot_box_size,
-    double collision_distance_threshold,
-    double far_zone_voxel_multiplier,
     rclcpp::Logger logger);
 
 #endif // PCL_PROCESSING_FUNCTIONS_H

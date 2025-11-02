@@ -80,15 +80,6 @@
         this->declare_parameter<double>("pmf_max_distance", 3.0);
         this->declare_parameter<double>("pmf_cell_size", 0.5);
 
-        // Hierarchical filtering parameters
-        this->declare_parameter<bool>("enable_hierarchical_filtering", false);
-        this->declare_parameter<double>("collision_distance_threshold", 3.0);
-        this->declare_parameter<double>("far_zone_voxel_multiplier", 2.0);
-
-        // Parallelization parameters
-        this->declare_parameter<int>("num_threads", 1);                      // 1=single, >1=parallel
-        this->declare_parameter<int>("parallel_threshold_points", 1000);     // Minimum points for parallelization
-
         // Hole detection parameters
         this->declare_parameter<bool>("hole_detection_enabled", false);
         this->declare_parameter<std::string>("hole_detection_algorithm", "BASIC");
@@ -140,15 +131,6 @@
         this->get_parameter("pmf_max_distance", pmf_max_distance_);
         this->get_parameter("pmf_cell_size", pmf_cell_size_);
 
-        // Hierarchical filtering parameters
-        this->get_parameter("enable_hierarchical_filtering", enable_hierarchical_filtering_);
-        this->get_parameter("collision_distance_threshold", collision_distance_threshold_);
-        this->get_parameter("far_zone_voxel_multiplier", far_zone_voxel_multiplier_);
-
-        // Parallelization parameters
-        this->get_parameter("num_threads", num_threads_);
-        this->get_parameter("parallel_threshold_points", parallel_threshold_points_);
-
         // Hole detection parameters
         this->get_parameter("hole_detection_enabled", hole_detection_enabled_);
         this->get_parameter("hole_detection_algorithm", hole_detection_algorithm_);
@@ -189,21 +171,6 @@
             throw std::runtime_error("Invalid normal_radius parameter");
         }
 
-        if (collision_distance_threshold_ <= 0.0) {
-            RCLCPP_ERROR(this->get_logger(), "collision_distance_threshold must be positive. Got %.3f", collision_distance_threshold_);
-            throw std::runtime_error("Invalid collision_distance_threshold parameter");
-        }
-
-        if (far_zone_voxel_multiplier_ <= 0.0) {
-            RCLCPP_ERROR(this->get_logger(), "far_zone_voxel_multiplier must be positive. Got %.3f", far_zone_voxel_multiplier_);
-            throw std::runtime_error("Invalid far_zone_voxel_multiplier parameter");
-        }
-
-        if (num_threads_ < 1) {
-            RCLCPP_WARN(this->get_logger(), "num_threads must be at least 1. Setting to 1. Got %d", num_threads_);
-            num_threads_ = 1;
-        }
-
         if (ground_remove_algorithm_ != "NORMAL" && ground_remove_algorithm_ != "PMF") {
             RCLCPP_WARN(this->get_logger(),
                 "ground_remove_algorithm must be 'NORMAL' or 'PMF'; using 'NORMAL' (got: '%s').",
@@ -231,16 +198,7 @@
         RCLCPP_INFO(this->get_logger(), "pmf_initial_distance: %f", pmf_initial_distance_);
         RCLCPP_INFO(this->get_logger(), "pmf_max_distance: %f", pmf_max_distance_);
         RCLCPP_INFO(this->get_logger(), "pmf_cell_size: %f", pmf_cell_size_);
-        
-        // Hierarchical filtering parameters log
-        RCLCPP_INFO(this->get_logger(), "enable_hierarchical_filtering: %s", enable_hierarchical_filtering_ ? "true" : "false");
-        RCLCPP_INFO(this->get_logger(), "collision_distance_threshold: %f", collision_distance_threshold_);
-        RCLCPP_INFO(this->get_logger(), "far_zone_voxel_multiplier: %f", far_zone_voxel_multiplier_);
-        
-        // Parallelization parameters log
-        RCLCPP_INFO(this->get_logger(), "num_threads: %d", num_threads_);
-        RCLCPP_INFO(this->get_logger(), "parallel_threshold_points: %d", parallel_threshold_points_);
-        
+
         // Hole detection parameters log
         RCLCPP_INFO(this->get_logger(), "hole_detection_enabled: %s", hole_detection_enabled_ ? "true" : "false");
         RCLCPP_INFO(this->get_logger(), "hole_detection_algorithm: %s", hole_detection_algorithm_.c_str());
@@ -309,28 +267,15 @@
         tf_time_ms = std::chrono::duration<double, std::milli>(tf_end_time - tf_start_time).count();
         RCLCPP_DEBUG(this->get_logger(), "TF Transform: %.3f ms (%zu points)", tf_time_ms, cloud->size());
           
-        // フィルタリングパイプライン選択
+        // フィルタリングパイプライン
         filtering_start_time = std::chrono::high_resolution_clock::now();
         size_t original_points = cloud->size();
-        
-        if (enable_hierarchical_filtering_) {
-            // 近場は密に、遠くは疎にしてダウンサンプリング。点群数が超多いときにおすすめ
-            applyHierarchicalFilteringPipeline(cloud, voxel_leaf_size_, 
-                                              obstacle_detection_range_x_min_, obstacle_detection_range_x_max_,
-                                              obstacle_detection_range_y_min_, obstacle_detection_range_y_max_,
-                                              obstacle_detection_range_z_min_, obstacle_detection_range_z_max_,
-                                              robot_box_position_, robot_box_size_,
-                                              collision_distance_threshold_, far_zone_voxel_multiplier_, this->get_logger());
-            RCLCPP_DEBUG(this->get_logger(), "Hierarchical filtering enabled");
-        } else {
-            // 単一ダウンサンプリング。通常はこちらがおすすめ
-            applyInPlaceFilteringPipeline(cloud, voxel_leaf_size_, 
-                                        obstacle_detection_range_x_min_, obstacle_detection_range_x_max_,
-                                        obstacle_detection_range_y_min_, obstacle_detection_range_y_max_,
-                                        obstacle_detection_range_z_min_, obstacle_detection_range_z_max_,
-                                        robot_box_position_, robot_box_size_, this->get_logger());
-            RCLCPP_DEBUG(this->get_logger(), "Standard in-place filtering enabled");
-        }
+
+        applyInPlaceFilteringPipeline(cloud, voxel_leaf_size_,
+                                    obstacle_detection_range_x_min_, obstacle_detection_range_x_max_,
+                                    obstacle_detection_range_y_min_, obstacle_detection_range_y_max_,
+                                    obstacle_detection_range_z_min_, obstacle_detection_range_z_max_,
+                                    robot_box_position_, robot_box_size_, this->get_logger());
         
         filtering_end_time = std::chrono::high_resolution_clock::now();
         filtering_time_ms = std::chrono::duration<double, std::milli>(filtering_end_time - filtering_start_time).count();
@@ -384,20 +329,19 @@
 
             // 並列法線推定の時間計測
             auto normal_start_time = std::chrono::high_resolution_clock::now();
-            pcl::PointCloud<pcl::Normal>::Ptr normals = estimateNormalsParallel(body_removed_cloud, normal_radius_, num_threads_, this->get_logger());
+            pcl::PointCloud<pcl::Normal>::Ptr normals = estimateNormals(body_removed_cloud, normal_radius_, this->get_logger());
             auto normal_end_time = std::chrono::high_resolution_clock::now();
             double normal_time_ms = std::chrono::duration<double, std::milli>(normal_end_time - normal_start_time).count();
             RCLCPP_DEBUG(this->get_logger(), "Normal estimation: %.3f ms (%zu points)", normal_time_ms, body_removed_cloud->size());
 
-            // 並列障害物/地面フィルタリング（両方を同時に取得）
+            // 障害物/地面フィルタリング（両方を同時に取得）
             auto filter_start_time = std::chrono::high_resolution_clock::now();
-            bool filter_success = filterObstaclesParallelWithGround(
+            bool filter_success = filterObstaclesWithGround(
                 body_removed_cloud,
                 normals,
                 filtered_cloud,
                 ground_cloud,
                 normal_max_slope_angle_,
-                num_threads_,
                 this->get_logger());
 
             if (!filter_success || filtered_cloud->empty()) {
@@ -473,38 +417,15 @@
             }
         }
 
-        // 並列処理: 穴検知を別スレッドで実行
+        // 穴検知処理
         pcl::PointCloud<pcl::PointXYZ>::Ptr hole_cloud;
         pcl::PointCloud<pcl::PointXYZ>::Ptr raw_hole_cloud(new pcl::PointCloud<pcl::PointXYZ>);
         double hole_processing_time_ms = 0.0;
 
-        if (num_threads_ > 1 && body_removed_cloud->size() > parallel_threshold_points_ && hole_detection_enabled_) {
-            // 並列実行: 穴検知を非同期で開始
-            RCLCPP_DEBUG(this->get_logger(), "Starting parallel hole detection with %d threads", num_threads_);
-
-            auto hole_future = std::async(std::launch::async, [this, body_removed_cloud]() {
-                auto start_time = std::chrono::high_resolution_clock::now();
-                pcl::PointCloud<pcl::PointXYZ>::Ptr raw_points(new pcl::PointCloud<pcl::PointXYZ>);
-                auto result = detectHoles(body_removed_cloud, raw_points);
-                auto end_time = std::chrono::high_resolution_clock::now();
-                double time_ms = std::chrono::duration<double, std::milli>(end_time - start_time).count();
-                return std::make_tuple(result, raw_points, time_ms);
-            });
-
-            // 並列実行の結果を取得
-            auto hole_result = hole_future.get();
-            hole_cloud = std::get<0>(hole_result);
-            raw_hole_cloud = std::get<1>(hole_result);
-            hole_processing_time_ms = std::get<2>(hole_result);
-            RCLCPP_DEBUG(this->get_logger(), "Parallel hole detection completed: %.3f ms", hole_processing_time_ms);
-        } else {
-            // シーケンシャル実行
-            auto hole_start_time = std::chrono::high_resolution_clock::now();
-            hole_cloud = detectHoles(body_removed_cloud, raw_hole_cloud);
-            auto hole_end_time = std::chrono::high_resolution_clock::now();
-            hole_processing_time_ms = std::chrono::duration<double, std::milli>(hole_end_time - hole_start_time).count();
-            RCLCPP_DEBUG(this->get_logger(), "Sequential hole detection: %.3f ms", hole_processing_time_ms);
-        }
+        auto hole_start_time = std::chrono::high_resolution_clock::now();
+        hole_cloud = detectHoles(body_removed_cloud, raw_hole_cloud);
+        auto hole_end_time = std::chrono::high_resolution_clock::now();
+        hole_processing_time_ms = std::chrono::duration<double, std::milli>(hole_end_time - hole_start_time).count();
 
         // パブリッシュ処理時間計測開始
         auto publish_start_time = std::chrono::high_resolution_clock::now();
