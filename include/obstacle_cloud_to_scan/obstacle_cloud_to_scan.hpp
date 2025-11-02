@@ -33,7 +33,8 @@ private:
     
     // Hole detection functions
     pcl::PointCloud<pcl::PointXYZ>::Ptr detectHoles(
-        const pcl::PointCloud<pcl::PointXYZ>::Ptr &cloud);
+        const pcl::PointCloud<pcl::PointXYZ>::Ptr &cloud,
+        pcl::PointCloud<pcl::PointXYZ>::Ptr &raw_hole_points);
 
     // Ground plane initialization
     void initializeGroundPlane();
@@ -44,6 +45,7 @@ private:
     rclcpp::Subscription<sensor_msgs::msg::PointCloud2>::SharedPtr point_cloud_subscriber_;
     rclcpp::Publisher<sensor_msgs::msg::PointCloud2>::SharedPtr filtered_cloud_publisher_;
     rclcpp::Publisher<sensor_msgs::msg::PointCloud2>::SharedPtr hole_cloud_publisher_;
+    rclcpp::Publisher<sensor_msgs::msg::PointCloud2>::SharedPtr hole_raw_cloud_publisher_;  // デバッグ用：穴検知前の元の点群
     rclcpp::Publisher<visualization_msgs::msg::Marker>::SharedPtr ground_plane_marker_publisher_;
 
     // TF2 members
@@ -81,6 +83,7 @@ private:
     bool hole_detection_enabled_;
     std::string hole_detection_algorithm_;
     std::string hole_output_topic_;
+    std::string hole_raw_output_topic_;  // デバッグ用：穴検知前の元の点群トピック
     std::string lidar_frame_;
     double hole_detection_range_x_;
     double hole_detection_range_y_;

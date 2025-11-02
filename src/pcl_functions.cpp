@@ -965,9 +965,15 @@ pcl::PointCloud<pcl::PointXYZ>::Ptr detectHolesBasicWithHeightCheck(
     const GroundPlane &ground_plane,
     double ground_tolerance,
     double height_buffer,
-    rclcpp::Logger logger)
+    rclcpp::Logger logger,
+    pcl::PointCloud<pcl::PointXYZ>::Ptr &raw_hole_points)
 {
     pcl::PointCloud<pcl::PointXYZ>::Ptr hole_cloud(new pcl::PointCloud<pcl::PointXYZ>);
+
+    // デバッグ用raw点群が指定されている場合は初期化
+    if (raw_hole_points) {
+        raw_hole_points->clear();
+    }
 
     for (const auto &point : cloud->points) {
         // LiDARから点への光線と地面平面の交点を計算
@@ -995,7 +1001,13 @@ pcl::PointCloud<pcl::PointXYZ>::Ptr detectHolesBasicWithHeightCheck(
 
         // 実際の点が期待される地面交点より明らかに遠い場合のみ穴と判定
         if (lidar_to_point_distance > lidar_to_intersection_distance + ground_tolerance) {
+            // 地面平面との交点を穴点として登録
             hole_cloud->points.push_back(intersection);
+
+            // デバッグ用：元の測定点（地面より低い点）も保存
+            if (raw_hole_points) {
+                raw_hole_points->points.push_back(point);
+            }
         }
     }
 

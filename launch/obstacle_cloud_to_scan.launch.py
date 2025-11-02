@@ -47,7 +47,7 @@ def generate_launch_description():
                 'parallel_threshold_points': 1000,     # Minimum points to enable parallelization (avoid overhead for small clouds)
                 
                 # Hole detection parameters (disabled by default)
-                'hole_detection_enabled': True,
+                'hole_detection_enabled': False,
                 'hole_detection_algorithm': 'BASIC',
                 'hole_output_topic': '/hole_cloud/cloud',
                 'lidar_frame': 'livox_frame',
@@ -57,7 +57,7 @@ def generate_launch_description():
                 'hole_ground_tolerance': 0.05,
 
                 # Dynamic ground plane estimation parameters
-                'use_dynamic_ground_plane': True,
+                'use_dynamic_ground_plane': False,
                 'ground_plane_rolling_window_x': 4.0,
                 'ground_plane_rolling_window_y': 6.0,
                 'ground_plane_ransac_distance_threshold': 0.05,
@@ -65,7 +65,7 @@ def generate_launch_description():
                 'hole_detection_height_buffer': 0.1,
 
                 # Ground plane visualization parameters
-                'visualize_ground_plane': True,
+                'visualize_ground_plane': False,
                 'ground_plane_visualization_topic': '/ground_plane_marker',
                 'ground_plane_visualization_size': 5.0
             }],

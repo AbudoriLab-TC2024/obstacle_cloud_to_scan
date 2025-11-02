@@ -152,7 +152,8 @@ pcl::PointCloud<pcl::PointXYZ>::Ptr detectHolesBasicWithHeightCheck(
     const GroundPlane &ground_plane,
     double ground_tolerance,
     double height_buffer,  // 地面より高い点のスキップバッファ
-    rclcpp::Logger logger);
+    rclcpp::Logger logger,
+    pcl::PointCloud<pcl::PointXYZ>::Ptr &raw_hole_points);  // デバッグ用：元の穴点（地面より低い点）
 
 // ===============================================
 // Phase 1: Memory-optimized in-place functions

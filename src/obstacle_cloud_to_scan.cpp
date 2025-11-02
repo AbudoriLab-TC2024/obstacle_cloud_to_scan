@@ -48,6 +48,9 @@
         hole_cloud_publisher_ = this->create_publisher<sensor_msgs::msg::PointCloud2>(hole_output_topic_, sensor_qos);
         RCLCPP_DEBUG(this->get_logger(), "Hole cloud publisher created for topic: %s", hole_output_topic_.c_str());
 
+        hole_raw_cloud_publisher_ = this->create_publisher<sensor_msgs::msg::PointCloud2>(hole_raw_output_topic_, sensor_qos);
+        RCLCPP_DEBUG(this->get_logger(), "Hole raw cloud publisher created for topic: %s", hole_raw_output_topic_.c_str());
+
         ground_plane_marker_publisher_ = this->create_publisher<visualization_msgs::msg::Marker>(ground_plane_visualization_topic_, 10);
         RCLCPP_DEBUG(this->get_logger(), "Ground plane marker publisher created for topic: %s", ground_plane_visualization_topic_.c_str());
     }
@@ -90,6 +93,7 @@
         this->declare_parameter<bool>("hole_detection_enabled", false);
         this->declare_parameter<std::string>("hole_detection_algorithm", "BASIC");
         this->declare_parameter<std::string>("hole_output_topic", "/hole_cloud/cloud");
+        this->declare_parameter<std::string>("hole_raw_output_topic", "/hole_cloud/raw");  // デバッグ用
         this->declare_parameter<std::string>("lidar_frame", "livox_frame");
         this->declare_parameter<double>("hole_detection_range_x", 3.0);
         this->declare_parameter<double>("hole_detection_range_y", 5.0);
@@ -149,6 +153,7 @@
         this->get_parameter("hole_detection_enabled", hole_detection_enabled_);
         this->get_parameter("hole_detection_algorithm", hole_detection_algorithm_);
         this->get_parameter("hole_output_topic", hole_output_topic_);
+        this->get_parameter("hole_raw_output_topic", hole_raw_output_topic_);
         this->get_parameter("lidar_frame", lidar_frame_);
         this->get_parameter("hole_detection_range_x", hole_detection_range_x_);
         this->get_parameter("hole_detection_range_y", hole_detection_range_y_);
@@ -240,6 +245,7 @@
         RCLCPP_INFO(this->get_logger(), "hole_detection_enabled: %s", hole_detection_enabled_ ? "true" : "false");
         RCLCPP_INFO(this->get_logger(), "hole_detection_algorithm: %s", hole_detection_algorithm_.c_str());
         RCLCPP_INFO(this->get_logger(), "hole_output_topic: %s", hole_output_topic_.c_str());
+        RCLCPP_INFO(this->get_logger(), "hole_raw_output_topic: %s", hole_raw_output_topic_.c_str());
         RCLCPP_INFO(this->get_logger(), "lidar_frame: %s", lidar_frame_.c_str());
         RCLCPP_INFO(this->get_logger(), "hole_detection_range_x: %f", hole_detection_range_x_);
         RCLCPP_INFO(this->get_logger(), "hole_detection_range_y: %f", hole_detection_range_y_);
@@ -469,29 +475,32 @@
 
         // 並列処理: 穴検知を別スレッドで実行
         pcl::PointCloud<pcl::PointXYZ>::Ptr hole_cloud;
+        pcl::PointCloud<pcl::PointXYZ>::Ptr raw_hole_cloud(new pcl::PointCloud<pcl::PointXYZ>);
         double hole_processing_time_ms = 0.0;
-        
+
         if (num_threads_ > 1 && body_removed_cloud->size() > parallel_threshold_points_ && hole_detection_enabled_) {
             // 並列実行: 穴検知を非同期で開始
             RCLCPP_DEBUG(this->get_logger(), "Starting parallel hole detection with %d threads", num_threads_);
-            
+
             auto hole_future = std::async(std::launch::async, [this, body_removed_cloud]() {
                 auto start_time = std::chrono::high_resolution_clock::now();
-                auto result = detectHoles(body_removed_cloud);
+                pcl::PointCloud<pcl::PointXYZ>::Ptr raw_points(new pcl::PointCloud<pcl::PointXYZ>);
+                auto result = detectHoles(body_removed_cloud, raw_points);
                 auto end_time = std::chrono::high_resolution_clock::now();
                 double time_ms = std::chrono::duration<double, std::milli>(end_time - start_time).count();
-                return std::make_pair(result, time_ms);
+                return std::make_tuple(result, raw_points, time_ms);
             });
-            
+
             // 並列実行の結果を取得
             auto hole_result = hole_future.get();
-            hole_cloud = hole_result.first;
-            hole_processing_time_ms = hole_result.second;
+            hole_cloud = std::get<0>(hole_result);
+            raw_hole_cloud = std::get<1>(hole_result);
+            hole_processing_time_ms = std::get<2>(hole_result);
             RCLCPP_DEBUG(this->get_logger(), "Parallel hole detection completed: %.3f ms", hole_processing_time_ms);
         } else {
             // シーケンシャル実行
             auto hole_start_time = std::chrono::high_resolution_clock::now();
-            hole_cloud = detectHoles(body_removed_cloud);
+            hole_cloud = detectHoles(body_removed_cloud, raw_hole_cloud);
             auto hole_end_time = std::chrono::high_resolution_clock::now();
             hole_processing_time_ms = std::chrono::duration<double, std::milli>(hole_end_time - hole_start_time).count();
             RCLCPP_DEBUG(this->get_logger(), "Sequential hole detection: %.3f ms", hole_processing_time_ms);
@@ -517,11 +526,23 @@
             hole_msg.header.frame_id = target_frame_;
             hole_msg.header.stamp = msg->header.stamp;
             hole_cloud_publisher_->publish(hole_msg);
-            
+
             if (hole_cloud->size() > 0) {
                 RCLCPP_DEBUG(this->get_logger(), "Publishing hole point cloud with %zu points", hole_cloud->size());
             } else {
                 RCLCPP_DEBUG(this->get_logger(), "Publishing empty hole cloud to update RViz display");
+            }
+
+            // デバッグ用：穴検知前の元の点群をパブリッシュ
+            sensor_msgs::msg::PointCloud2 raw_hole_msg;
+            pcl::toROSMsg(*raw_hole_cloud, raw_hole_msg);
+
+            raw_hole_msg.header.frame_id = target_frame_;
+            raw_hole_msg.header.stamp = msg->header.stamp;
+            hole_raw_cloud_publisher_->publish(raw_hole_msg);
+
+            if (raw_hole_cloud->size() > 0) {
+                RCLCPP_DEBUG(this->get_logger(), "デバッグ用：穴検知前の元の点群をパブリッシュ (%zu点)", raw_hole_cloud->size());
             }
         }
         
@@ -638,27 +659,34 @@ void ObstacleCloudToScanNode::initializeGroundPlane()
 }
 
 pcl::PointCloud<pcl::PointXYZ>::Ptr ObstacleCloudToScanNode::detectHoles(
-    const pcl::PointCloud<pcl::PointXYZ>::Ptr &cloud)
+    const pcl::PointCloud<pcl::PointXYZ>::Ptr &cloud,
+    pcl::PointCloud<pcl::PointXYZ>::Ptr &raw_hole_points)
 {
     pcl::PointCloud<pcl::PointXYZ>::Ptr hole_cloud(new pcl::PointCloud<pcl::PointXYZ>);
-    
+
+    // raw_hole_pointsを初期化
+    if (!raw_hole_points) {
+        raw_hole_points = pcl::PointCloud<pcl::PointXYZ>::Ptr(new pcl::PointCloud<pcl::PointXYZ>);
+    }
+    raw_hole_points->clear();
+
     if (!hole_detection_enabled_) {
         return hole_cloud;
     }
-    
+
     if (!ground_plane_initialized_) {
         RCLCPP_DEBUG(this->get_logger(), "Ground plane not initialized, skipping hole detection");
         return hole_cloud;
     }
-    
+
     // 穴検知範囲フィルタを適用
     pcl::PointCloud<pcl::PointXYZ>::Ptr filtered_cloud = filterHoleDetectionRange(
-        cloud, 
-        hole_detection_range_x_, 
-        hole_detection_range_y_, 
+        cloud,
+        hole_detection_range_x_,
+        hole_detection_range_y_,
         hole_detection_max_height_,
         this->get_logger());
-    
+
     // 穴検知を実行
     if (use_dynamic_ground_plane_) {
         // 動的地面平面推定使用時：高さチェック付き穴検知
@@ -669,7 +697,8 @@ pcl::PointCloud<pcl::PointXYZ>::Ptr ObstacleCloudToScanNode::detectHoles(
             ground_plane_,
             hole_ground_tolerance_,
             hole_detection_height_buffer_,
-            this->get_logger());
+            this->get_logger(),
+            raw_hole_points);  // デバッグ用：元の点群を取得
     } else {
         // 静的地面平面使用時：従来の穴検知
         RCLCPP_DEBUG(this->get_logger(), "穴検知実行（静的地面平面）");
@@ -679,8 +708,9 @@ pcl::PointCloud<pcl::PointXYZ>::Ptr ObstacleCloudToScanNode::detectHoles(
             ground_plane_,
             hole_ground_tolerance_,
             this->get_logger());
+        // 静的平面では元の点群は取得しない（従来の関数を使用）
     }
-    
+
     return hole_cloud;
 }
 
