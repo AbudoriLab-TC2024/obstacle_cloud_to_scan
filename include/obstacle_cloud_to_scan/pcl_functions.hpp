@@ -40,10 +40,10 @@ pcl::PointCloud<pcl::PointXYZ>::Ptr applyProgressiveMorphologicalFilter(
     const pcl::PointCloud<pcl::PointXYZ>::Ptr &cloud,
     rclcpp::Logger logger,
     int max_window_size,
-    double slope,             // Changed from float to double for consistency
-    double initial_distance,  // Changed from float to double
-    double max_distance,      // Changed from float to double
-    double cell_size);        // Changed from float to double
+    double slope,
+    double initial_distance,
+    double max_distance,
+    double cell_size);
 
 // PMFによる地面除去（地面点と障害物点の両方を返す）
 bool applyProgressiveMorphologicalFilterWithGround(
@@ -72,8 +72,8 @@ bool rayPlaneIntersection(
     const GroundPlane &plane,
     pcl::PointXYZ &intersection);
 
-// 基本穴検知
-pcl::PointCloud<pcl::PointXYZ>::Ptr detectHolesBasic(
+// 穴検知
+pcl::PointCloud<pcl::PointXYZ>::Ptr detectHoles(
     const pcl::PointCloud<pcl::PointXYZ>::Ptr &cloud,
     const pcl::PointXYZ &lidar_origin,
     const GroundPlane &ground_plane,
@@ -99,8 +99,8 @@ bool estimateGroundPlaneRANSAC(
     int max_iterations,
     rclcpp::Logger logger);
 
-// 高さチェック付き基本穴検知（改善版）
-pcl::PointCloud<pcl::PointXYZ>::Ptr detectHolesBasicWithHeightCheck(
+// 高さチェック付き穴検知
+pcl::PointCloud<pcl::PointXYZ>::Ptr detectHolesWithHeightCheck(
     const pcl::PointCloud<pcl::PointXYZ>::Ptr &cloud,
     const pcl::PointXYZ &lidar_origin,
     const GroundPlane &ground_plane,
@@ -110,11 +110,11 @@ pcl::PointCloud<pcl::PointXYZ>::Ptr detectHolesBasicWithHeightCheck(
     pcl::PointCloud<pcl::PointXYZ>::Ptr &raw_hole_points);  // デバッグ用：元の穴点（地面より低い点）
 
 // ===============================================
-// Phase 1: Memory-optimized in-place functions
+// メモリ最適化フィルタリング関数群
 // ===============================================
 
-// インプレース版 - 統合フィルタリングパイプライン
-void applyInPlaceFilteringPipeline(
+// 統合フィルタリングパイプライン
+void applyFilteringPipeline(
     pcl::PointCloud<pcl::PointXYZ>::Ptr &cloud,
     double voxel_leaf_size,
     double obstacle_x_min, double obstacle_x_max,
@@ -124,22 +124,22 @@ void applyInPlaceFilteringPipeline(
     const std::vector<double> &robot_box_size,
     rclcpp::Logger logger);
 
-// インプレース版 - ダウンサンプリング
-void downsamplePointCloudInPlace(
+// ダウンサンプリング
+void downsamplePointCloud(
     pcl::PointCloud<pcl::PointXYZ>::Ptr &cloud,
     double voxel_leaf_size,
     rclcpp::Logger logger);
 
-// インプレース版 - パススルーフィルタ
-void applyPassThroughFilterInPlace(
+// パススルーフィルタ
+void applyPassThroughFilter(
     pcl::PointCloud<pcl::PointXYZ>::Ptr &cloud,
     double x_min, double x_max,
     double y_min, double y_max,
     double z_min, double z_max,
     rclcpp::Logger logger);
 
-// インプレース版 - ロボット体除去
-void removeRobotBodyInPlace(
+// ロボット体除去
+void removeRobotBody(
     pcl::PointCloud<pcl::PointXYZ>::Ptr &cloud,
     const std::vector<double> &box_position,
     const std::vector<double> &box_size,

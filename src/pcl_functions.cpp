@@ -14,11 +14,11 @@ pcl::PointCloud<pcl::PointXYZ>::Ptr applyProgressiveMorphologicalFilter(
     double max_distance,
     double cell_size)
 {
-    RCLCPP_DEBUG(logger, "Starting PMF ground filtering (in pcl_functions)");
+    RCLCPP_DEBUG(logger, "PMF地面フィルタ開始");
     pcl::PointCloud<pcl::PointXYZ>::Ptr filtered_cloud(new pcl::PointCloud<pcl::PointXYZ>);
 
     if (cloud->empty()) {
-        RCLCPP_WARN(logger, "Input cloud to PMF is empty.");
+        RCLCPP_WARN(logger, "PMFへの入力点群が空です");
         return filtered_cloud;
     }
 
@@ -43,10 +43,10 @@ pcl::PointCloud<pcl::PointXYZ>::Ptr applyProgressiveMorphologicalFilter(
     pcl::ExtractIndices<pcl::PointXYZ> extract;
     extract.setInputCloud(cloud);
     extract.setIndices(ground_indices);
-    extract.setNegative(true); // true = extract points NOT in indices
+    extract.setNegative(true); // 地面以外の点を抽出
     extract.filter(*filtered_cloud);
 
-    RCLCPP_DEBUG(logger, "PMF ground filtering completed (in pcl_functions). Number of obstacle points: %zu", filtered_cloud->size());
+    RCLCPP_DEBUG(logger, "PMF地面フィルタ完了: 障害物%zu点", filtered_cloud->size());
     return filtered_cloud;
 }
 
@@ -119,7 +119,7 @@ pcl::PointCloud<pcl::Normal>::Ptr estimateNormals(
     normal_estimation.setSearchMethod(tree);
     normal_estimation.setRadiusSearch(normal_radius);
     normal_estimation.compute(*normals);
-    RCLCPP_DEBUG(logger, "Normal estimation completed");
+    RCLCPP_DEBUG(logger, "法線推定完了");
 
     return normals;
 }
@@ -188,8 +188,8 @@ pcl::PointCloud<pcl::PointXYZ>::Ptr filterHoleDetectionRange(
     pass_z.setFilterFieldName("z");
     pass_z.setFilterLimits(-10.0, max_height); // 下限は十分低く設定
     pass_z.filter(*filtered_cloud);
-    
-    RCLCPP_DEBUG(logger, "Hole detection range filter: %zu -> %zu points", 
+
+    RCLCPP_DEBUG(logger, "穴検知範囲フィルタ: %zu -> %zu点",
                 cloud->size(), filtered_cloud->size());
     return filtered_cloud;
 }
@@ -226,7 +226,7 @@ bool rayPlaneIntersection(
     return true;
 }
 
-pcl::PointCloud<pcl::PointXYZ>::Ptr detectHolesBasic(
+pcl::PointCloud<pcl::PointXYZ>::Ptr detectHoles(
     const pcl::PointCloud<pcl::PointXYZ>::Ptr &cloud,
     const pcl::PointXYZ &lidar_origin,
     const GroundPlane &ground_plane,
@@ -257,17 +257,17 @@ pcl::PointCloud<pcl::PointXYZ>::Ptr detectHolesBasic(
             hole_cloud->points.push_back(intersection);
         }
     }
-    
-    RCLCPP_DEBUG(logger, "Hole detection: %zu -> %zu hole points", 
+
+    RCLCPP_DEBUG(logger, "穴検知: %zu点中%zu点の穴を検出",
                 cloud->size(), hole_cloud->size());
     return hole_cloud;
 }
 
 // ===============================================
-// Phase 1: Memory-optimized in-place functions
+// メモリ最適化フィルタリング関数群
 // ===============================================
 
-void applyInPlaceFilteringPipeline(
+void applyFilteringPipeline(
     pcl::PointCloud<pcl::PointXYZ>::Ptr &cloud,
     double voxel_leaf_size,
     double obstacle_x_min, double obstacle_x_max,
@@ -277,40 +277,40 @@ void applyInPlaceFilteringPipeline(
     const std::vector<double> &robot_box_size,
     rclcpp::Logger logger)
 {
-    RCLCPP_DEBUG(logger, "Starting in-place filtering pipeline with %zu points", cloud->size());
-    
-    // Step 1: ダウンサンプリング (最も効果的な削減)
-    downsamplePointCloudInPlace(cloud, voxel_leaf_size, logger);
-    
-    // Step 2: パススルーフィルタ (X,Y,Z方向障害物検知範囲制限)
-    applyPassThroughFilterInPlace(cloud, obstacle_x_min, obstacle_x_max, 
-                                  obstacle_y_min, obstacle_y_max,
-                                  obstacle_z_min, obstacle_z_max, logger);
-    
+    RCLCPP_DEBUG(logger, "フィルタリングパイプライン開始: %zu点", cloud->size());
+
+    // Step 1: ダウンサンプリング（最も効果的な削減）
+    downsamplePointCloud(cloud, voxel_leaf_size, logger);
+
+    // Step 2: パススルーフィルタ（X,Y,Z方向障害物検知範囲制限）
+    applyPassThroughFilter(cloud, obstacle_x_min, obstacle_x_max,
+                          obstacle_y_min, obstacle_y_max,
+                          obstacle_z_min, obstacle_z_max, logger);
+
     // Step 3: ロボット体除去
-    removeRobotBodyInPlace(cloud, robot_box_position, robot_box_size, logger);
-    
-    RCLCPP_DEBUG(logger, "In-place filtering pipeline completed with %zu points", cloud->size());
+    removeRobotBody(cloud, robot_box_position, robot_box_size, logger);
+
+    RCLCPP_DEBUG(logger, "フィルタリングパイプライン完了: %zu点", cloud->size());
 }
 
-void downsamplePointCloudInPlace(
+void downsamplePointCloud(
     pcl::PointCloud<pcl::PointXYZ>::Ptr &cloud,
     double voxel_leaf_size,
     rclcpp::Logger logger)
 {
     size_t original_size = cloud->size();
-    
+
     pcl::VoxelGrid<pcl::PointXYZ> voxel_filter;
     voxel_filter.setInputCloud(cloud);
     voxel_filter.setLeafSize(voxel_leaf_size, voxel_leaf_size, voxel_leaf_size);
-    
+
     // 同じポインタに結果を書き戻し
     voxel_filter.filter(*cloud);
-    
-    RCLCPP_DEBUG(logger, "In-place downsampling: %zu -> %zu points", original_size, cloud->size());
+
+    RCLCPP_DEBUG(logger, "ダウンサンプリング: %zu -> %zu点", original_size, cloud->size());
 }
 
-void applyPassThroughFilterInPlace(
+void applyPassThroughFilter(
     pcl::PointCloud<pcl::PointXYZ>::Ptr &cloud,
     double x_min, double x_max,
     double y_min, double y_max,
@@ -318,48 +318,48 @@ void applyPassThroughFilterInPlace(
     rclcpp::Logger logger)
 {
     size_t original_size = cloud->size();
-    
+
     // X方向フィルタ
     pcl::PassThrough<pcl::PointXYZ> pass_x;
     pass_x.setInputCloud(cloud);
     pass_x.setFilterFieldName("x");
     pass_x.setFilterLimits(x_min, x_max);
     pass_x.filter(*cloud);
-    
+
     // Y方向フィルタ
     pcl::PassThrough<pcl::PointXYZ> pass_y;
     pass_y.setInputCloud(cloud);
     pass_y.setFilterFieldName("y");
     pass_y.setFilterLimits(y_min, y_max);
     pass_y.filter(*cloud);
-    
+
     // Z方向フィルタ
     pcl::PassThrough<pcl::PointXYZ> pass_z;
     pass_z.setInputCloud(cloud);
     pass_z.setFilterFieldName("z");
     pass_z.setFilterLimits(z_min, z_max);
     pass_z.filter(*cloud);
-    
-    RCLCPP_DEBUG(logger, "In-place passthrough: %zu -> %zu points (X: %.1f~%.1f, Y: %.1f~%.1f, Z: %.1f~%.1f)", 
+
+    RCLCPP_DEBUG(logger, "パススルーフィルタ: %zu -> %zu点 (X: %.1f~%.1f, Y: %.1f~%.1f, Z: %.1f~%.1f)",
                 original_size, cloud->size(), x_min, x_max, y_min, y_max, z_min, z_max);
 }
 
-void removeRobotBodyInPlace(
+void removeRobotBody(
     pcl::PointCloud<pcl::PointXYZ>::Ptr &cloud,
     const std::vector<double> &box_position,
     const std::vector<double> &box_size,
     rclcpp::Logger logger)
 {
     size_t original_size = cloud->size();
-    
+
     pcl::CropBox<pcl::PointXYZ> crop_box_filter;
     crop_box_filter.setInputCloud(cloud);
 
     // ロボット体のバウンディングボックス設定
     Eigen::Vector4f min_point(-(box_size[0]/2)+box_position[0],
-                              -(box_size[1]/2)+box_position[1], 
+                              -(box_size[1]/2)+box_position[1],
                               0.0+box_position[2], 1.0);
-    Eigen::Vector4f max_point(box_size[0]/2+box_position[0], 
+    Eigen::Vector4f max_point(box_size[0]/2+box_position[0],
                               box_size[1]/2+box_position[1],
                               box_size[2]+box_position[2], 1.0);
 
@@ -369,8 +369,8 @@ void removeRobotBodyInPlace(
 
     // 同じポインタに結果を書き戻し
     crop_box_filter.filter(*cloud);
-    
-    RCLCPP_DEBUG(logger, "In-place robot body removal: %zu -> %zu points", original_size, cloud->size());
+
+    RCLCPP_DEBUG(logger, "ロボット体除去: %zu -> %zu点", original_size, cloud->size());
 }
 
 // ===============================================
@@ -464,7 +464,7 @@ bool estimateGroundPlaneRANSAC(
     return true;
 }
 
-pcl::PointCloud<pcl::PointXYZ>::Ptr detectHolesBasicWithHeightCheck(
+pcl::PointCloud<pcl::PointXYZ>::Ptr detectHolesWithHeightCheck(
     const pcl::PointCloud<pcl::PointXYZ>::Ptr &cloud,
     const pcl::PointXYZ &lidar_origin,
     const GroundPlane &ground_plane,

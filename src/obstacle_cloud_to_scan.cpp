@@ -15,8 +15,6 @@
 #include <chrono>
 #include <numeric>
 #include <functional>
-#include <future>
-#include <thread>
 #include "obstacle_cloud_to_scan/obstacle_cloud_to_scan.hpp"
 
 
@@ -256,11 +254,11 @@
         }
         Eigen::Affine3d transform = tf2::transformToEigen(transform_stamped.transform);
 
-        // Phase 1: Memory-optimized pipeline
+        // メモリ最適化パイプライン
         pcl::PointCloud<pcl::PointXYZ>::Ptr cloud(new pcl::PointCloud<pcl::PointXYZ>);
         pcl::fromROSMsg(*msg, *cloud);
 
-        // TF変換を直接cloudに適用 (余計なコピーを削除)
+        // TF変換を直接cloudに適用（余計なコピーを削除）
         pcl::transformPointCloud(*cloud, *cloud, transform);
 
         auto tf_end_time = std::chrono::high_resolution_clock::now();
@@ -271,11 +269,11 @@
         filtering_start_time = std::chrono::high_resolution_clock::now();
         size_t original_points = cloud->size();
 
-        applyInPlaceFilteringPipeline(cloud, voxel_leaf_size_,
-                                    obstacle_detection_range_x_min_, obstacle_detection_range_x_max_,
-                                    obstacle_detection_range_y_min_, obstacle_detection_range_y_max_,
-                                    obstacle_detection_range_z_min_, obstacle_detection_range_z_max_,
-                                    robot_box_position_, robot_box_size_, this->get_logger());
+        applyFilteringPipeline(cloud, voxel_leaf_size_,
+                              obstacle_detection_range_x_min_, obstacle_detection_range_x_max_,
+                              obstacle_detection_range_y_min_, obstacle_detection_range_y_max_,
+                              obstacle_detection_range_z_min_, obstacle_detection_range_z_max_,
+                              robot_box_position_, robot_box_size_, this->get_logger());
         
         filtering_end_time = std::chrono::high_resolution_clock::now();
         filtering_time_ms = std::chrono::duration<double, std::milli>(filtering_end_time - filtering_start_time).count();
@@ -612,7 +610,7 @@ pcl::PointCloud<pcl::PointXYZ>::Ptr ObstacleCloudToScanNode::detectHoles(
     if (use_dynamic_ground_plane_) {
         // 動的地面平面推定使用時：高さチェック付き穴検知
         RCLCPP_DEBUG(this->get_logger(), "穴検知実行（動的地面平面、高さチェック付き）");
-        hole_cloud = detectHolesBasicWithHeightCheck(
+        hole_cloud = detectHolesWithHeightCheck(
             filtered_cloud,
             lidar_origin_,
             ground_plane_,
@@ -623,7 +621,7 @@ pcl::PointCloud<pcl::PointXYZ>::Ptr ObstacleCloudToScanNode::detectHoles(
     } else {
         // 静的地面平面使用時：従来の穴検知
         RCLCPP_DEBUG(this->get_logger(), "穴検知実行（静的地面平面）");
-        hole_cloud = detectHolesBasic(
+        hole_cloud = ::detectHoles(
             filtered_cloud,
             lidar_origin_,
             ground_plane_,

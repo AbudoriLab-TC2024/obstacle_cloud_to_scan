@@ -23,7 +23,7 @@ def generate_launch_description():
                 'robot_box_size': [0.8, 0.5, 0.6],
                 'robot_box_position': [0.0, 0.0, 0.0],
                 
-                # Obstacle detection range parameters (X, Y, Z PassThrough filter)
+                # 障害物検知範囲パラメータ（X, Y, Z パススルーフィルタ）
                 'obstacle_detection_range_x_min': 0.4,
                 'obstacle_detection_range_x_max': 6.0,
                 'obstacle_detection_range_y_min': -6.0,
@@ -36,17 +36,8 @@ def generate_launch_description():
                 'pmf_initial_distance': 0.15,
                 'pmf_max_distance': 3.0,
                 'pmf_cell_size': 0.5,
-                
-                # Phase 2: Hierarchical filtering parameters (disabled by default for optimal performance)
-                'enable_hierarchical_filtering': False,  # Set to True for large-scale environments or safety-critical applications
-                'collision_distance_threshold': 3.0,    # Distance threshold for near/far classification (meters)
-                'far_zone_voxel_multiplier': 2.0,      # Voxel size multiplier for far zone (2.0 = 2x coarser)
-                
-                # Parallelization parameters (single thread by default for optimal performance)
-                'num_threads': 1,                       # 1=single thread, >1=parallel processing (e.g., 2-4 for multi-core)
-                'parallel_threshold_points': 1000,     # Minimum points to enable parallelization (avoid overhead for small clouds)
-                
-                # Hole detection parameters (disabled by default)
+
+                # 穴検知パラメータ
                 'hole_detection_enabled': True,
                 'hole_detection_algorithm': 'BASIC',
                 'hole_output_topic': '/hole_cloud/cloud',
@@ -56,7 +47,7 @@ def generate_launch_description():
                 'hole_detection_max_height': 0.3,
                 'hole_ground_tolerance': 0.05,
 
-                # Dynamic ground plane estimation parameters
+                # 動的地面平面推定パラメータ
                 'use_dynamic_ground_plane': True,
                 'ground_plane_rolling_window_x': 4.0,
                 'ground_plane_rolling_window_y': 6.0,
@@ -64,7 +55,7 @@ def generate_launch_description():
                 'ground_plane_ransac_max_iterations': 100,
                 'hole_detection_height_buffer': 0.1,
 
-                # Ground plane visualization parameters
+                # 地面平面可視化パラメータ
                 'visualize_ground_plane': True,
                 'ground_plane_visualization_topic': '/ground_plane_marker',
                 'ground_plane_visualization_size': 5.0
