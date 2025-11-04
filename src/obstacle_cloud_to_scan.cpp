@@ -447,6 +447,16 @@
         auto hole_end_time = std::chrono::high_resolution_clock::now();
         hole_processing_time_ms = std::chrono::duration<double, std::milli>(hole_end_time - hole_start_time).count();
 
+        // 穴検知が有効で穴点群が存在する場合、障害物点群とマージ
+        if (hole_detection_enabled_ && hole_cloud && !hole_cloud->empty()) {
+            size_t obstacle_points = filtered_cloud->size();
+            size_t hole_points = hole_cloud->size();
+            *filtered_cloud += *hole_cloud;
+            RCLCPP_DEBUG(this->get_logger(),
+                        "Merged hole cloud into obstacle cloud (%zu obstacle + %zu hole = %zu total points)",
+                        obstacle_points, hole_points, filtered_cloud->size());
+        }
+
         // パブリッシュ処理時間計測開始
         auto publish_start_time = std::chrono::high_resolution_clock::now();
         
