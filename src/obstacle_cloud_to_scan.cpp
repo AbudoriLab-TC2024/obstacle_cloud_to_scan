@@ -35,6 +35,14 @@
         declare_parameters();
         get_parameters();
 
+        // LiDAR原点をパラメータから初期化（動的モードでも必須）
+        lidar_origin_.x = lidar_origin_x_;
+        lidar_origin_.y = lidar_origin_y_;
+        lidar_origin_.z = lidar_origin_z_;
+        RCLCPP_INFO(this->get_logger(),
+                   "LiDAR origin initialized from parameters: (%.3f, %.3f, %.3f)",
+                   lidar_origin_.x, lidar_origin_.y, lidar_origin_.z);
+
         auto sensor_qos = rclcpp::SensorDataQoS();
         point_cloud_subscriber_ = this->create_subscription<sensor_msgs::msg::PointCloud2>(
             input_topic_, sensor_qos, std::bind(&ObstacleCloudToScanNode::pointCloudCallback, this, std::placeholders::_1));
@@ -101,6 +109,11 @@
         this->declare_parameter<bool>("visualize_ground_plane", false);
         this->declare_parameter<std::string>("ground_plane_visualization_topic", "/ground_plane_marker");
         this->declare_parameter<double>("ground_plane_visualization_size", 5.0);
+
+        // LiDAR origin parameters (fallback when TF is unavailable)
+        this->declare_parameter<double>("lidar_origin_x", 0.0);
+        this->declare_parameter<double>("lidar_origin_y", 0.0);
+        this->declare_parameter<double>("lidar_origin_z", 0.0);
 
     }
 
@@ -225,6 +238,15 @@
         RCLCPP_INFO(this->get_logger(), "visualize_ground_plane: %s", visualize_ground_plane_ ? "true" : "false");
         RCLCPP_INFO(this->get_logger(), "ground_plane_visualization_topic: %s", ground_plane_visualization_topic_.c_str());
         RCLCPP_INFO(this->get_logger(), "ground_plane_visualization_size: %f", ground_plane_visualization_size_);
+
+        // LiDAR origin parameters
+        this->get_parameter("lidar_origin_x", lidar_origin_x_);
+        this->get_parameter("lidar_origin_y", lidar_origin_y_);
+        this->get_parameter("lidar_origin_z", lidar_origin_z_);
+
+        // LiDAR origin parameters log
+        RCLCPP_INFO(this->get_logger(), "lidar_origin (fallback): (%.3f, %.3f, %.3f)",
+                   lidar_origin_x_, lidar_origin_y_, lidar_origin_z_);
     }
 
     void ObstacleCloudToScanNode::pointCloudCallback(const sensor_msgs::msg::PointCloud2::SharedPtr msg)
@@ -417,7 +439,7 @@
 
         // 穴検知処理
         pcl::PointCloud<pcl::PointXYZ>::Ptr hole_cloud;
-        pcl::PointCloud<pcl::PointXYZ>::Ptr raw_hole_cloud(new pcl::PointCloud<pcl::PointXYZ>);
+        pcl::PointCloud<pcl::PointXYZRGB>::Ptr raw_hole_cloud(new pcl::PointCloud<pcl::PointXYZRGB>);
         double hole_processing_time_ms = 0.0;
 
         auto hole_start_time = std::chrono::high_resolution_clock::now();
@@ -549,43 +571,29 @@ void ObstacleCloudToScanNode::logPerformance()
 
 void ObstacleCloudToScanNode::initializeGroundPlane()
 {
-    try {
-        // LiDAR原点をtarget_frame座標系で取得
-        auto transform_stamped = tf_buffer_->lookupTransform(
-            target_frame_, lidar_frame_, tf2::TimePointZero);
-        
-        lidar_origin_.x = transform_stamped.transform.translation.x;
-        lidar_origin_.y = transform_stamped.transform.translation.y;
-        lidar_origin_.z = transform_stamped.transform.translation.z;
-        
-        // target_frame座標系でのz=0平面（水平地面）
-        ground_plane_.a = 0.0;  // x係数
-        ground_plane_.b = 0.0;  // y係数  
-        ground_plane_.c = 1.0;  // z係数（上向き法線）
-        ground_plane_.d = 0.0;  // 定数項（z=0平面）
-        
-        ground_plane_initialized_ = true;
-        
-        RCLCPP_INFO(this->get_logger(), 
-                   "Ground plane initialized. LiDAR origin in %s: (%.3f, %.3f, %.3f)",
-                   target_frame_.c_str(), lidar_origin_.x, lidar_origin_.y, lidar_origin_.z);
-                   
-    } catch (tf2::TransformException &ex) {
-        RCLCPP_WARN(this->get_logger(), 
-                   "Could not initialize ground plane: %s", ex.what());
-        ground_plane_initialized_ = false;
-    }
+    // 静的地面平面を初期化（z=0の水平平面）
+    // 注：LiDAR原点は既にコンストラクタで初期化済み
+
+    // target_frame座標系でのz=0平面（水平地面）
+    ground_plane_.a = 0.0;  // x係数
+    ground_plane_.b = 0.0;  // y係数
+    ground_plane_.c = 1.0;  // z係数（上向き法線）
+    ground_plane_.d = 0.0;  // 定数項（z=0平面）
+
+    ground_plane_initialized_ = true;
+
+    RCLCPP_INFO(this->get_logger(), "Static ground plane initialized (z=0 plane)");
 }
 
 pcl::PointCloud<pcl::PointXYZ>::Ptr ObstacleCloudToScanNode::detectHoles(
     const pcl::PointCloud<pcl::PointXYZ>::Ptr &cloud,
-    pcl::PointCloud<pcl::PointXYZ>::Ptr &raw_hole_points)
+    pcl::PointCloud<pcl::PointXYZRGB>::Ptr &raw_hole_points)
 {
     pcl::PointCloud<pcl::PointXYZ>::Ptr hole_cloud(new pcl::PointCloud<pcl::PointXYZ>);
 
     // raw_hole_pointsを初期化
     if (!raw_hole_points) {
-        raw_hole_points = pcl::PointCloud<pcl::PointXYZ>::Ptr(new pcl::PointCloud<pcl::PointXYZ>);
+        raw_hole_points = pcl::PointCloud<pcl::PointXYZRGB>::Ptr(new pcl::PointCloud<pcl::PointXYZRGB>);
     }
     raw_hole_points->clear();
 
@@ -594,41 +602,19 @@ pcl::PointCloud<pcl::PointXYZ>::Ptr ObstacleCloudToScanNode::detectHoles(
     }
 
     if (!ground_plane_initialized_) {
-        RCLCPP_DEBUG(this->get_logger(), "Ground plane not initialized, skipping hole detection");
+        RCLCPP_DEBUG(this->get_logger(), "Ground plane not initialized");
         return hole_cloud;
     }
 
-    // 穴検知範囲フィルタを適用
-    pcl::PointCloud<pcl::PointXYZ>::Ptr filtered_cloud = filterHoleDetectionRange(
-        cloud,
-        hole_detection_range_x_,
-        hole_detection_range_y_,
-        hole_detection_max_height_,
-        this->get_logger());
-
-    // 穴検知を実行
-    if (use_dynamic_ground_plane_) {
-        // 動的地面平面推定使用時：高さチェック付き穴検知
-        RCLCPP_DEBUG(this->get_logger(), "穴検知実行（動的地面平面、高さチェック付き）");
-        hole_cloud = detectHolesWithHeightCheck(
-            filtered_cloud,
-            lidar_origin_,
-            ground_plane_,
-            hole_ground_tolerance_,
-            hole_detection_height_buffer_,
-            this->get_logger(),
-            raw_hole_points);  // デバッグ用：元の点群を取得
-    } else {
-        // 静的地面平面使用時：従来の穴検知
-        RCLCPP_DEBUG(this->get_logger(), "穴検知実行（静的地面平面）");
-        hole_cloud = ::detectHoles(
-            filtered_cloud,
-            lidar_origin_,
-            ground_plane_,
-            hole_ground_tolerance_,
-            this->get_logger());
-        // 静的平面では元の点群は取得しない（従来の関数を使用）
-    }
+    // 穴検知を実行（フィルタ削除、統合版detectHolesを使用）
+    RCLCPP_DEBUG(this->get_logger(), "穴検知実行（シンプル判定ロジック）");
+    hole_cloud = ::detectHoles(
+        cloud,  // body_removed_cloudをそのまま使用（フィルタ削除）
+        lidar_origin_,
+        ground_plane_,
+        hole_ground_tolerance_,
+        this->get_logger(),
+        raw_hole_points);  // RGB色付き点群
 
     return hole_cloud;
 }

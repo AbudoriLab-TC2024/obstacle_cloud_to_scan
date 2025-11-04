@@ -48,7 +48,12 @@ def generate_launch_description():
                 'hole_detection_range_x': 3.0,
                 'hole_detection_range_y': 5.0,
                 'hole_detection_max_height': 0.3,
-                'hole_ground_tolerance': 0.05
+                'hole_ground_tolerance': 0.05,
+
+                # LiDAR原点パラメータ（target_frame座標系での位置）
+                'lidar_origin_x': 0.0,
+                'lidar_origin_y': 0.0,
+                'lidar_origin_z': 0.3  # 例：地上0.3mにLiDAR設置
             }],
         )
     ])

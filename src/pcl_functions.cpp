@@ -157,43 +157,6 @@ bool filterObstaclesWithGround(
     return true;
 }
 
-
-pcl::PointCloud<pcl::PointXYZ>::Ptr filterHoleDetectionRange(
-    const pcl::PointCloud<pcl::PointXYZ>::Ptr &cloud,
-    double range_x,
-    double range_y,
-    double max_height,
-    rclcpp::Logger logger)
-{
-    pcl::PointCloud<pcl::PointXYZ>::Ptr temp_cloud(new pcl::PointCloud<pcl::PointXYZ>);
-    pcl::PointCloud<pcl::PointXYZ>::Ptr filtered_cloud(new pcl::PointCloud<pcl::PointXYZ>);
-    
-    // X方向フィルタ (0 ~ range_x)
-    pcl::PassThrough<pcl::PointXYZ> pass_x;
-    pass_x.setInputCloud(cloud);
-    pass_x.setFilterFieldName("x");
-    pass_x.setFilterLimits(0.0, range_x);
-    pass_x.filter(*temp_cloud);
-    
-    // Y方向フィルタ (-range_y/2 ~ +range_y/2)
-    pcl::PassThrough<pcl::PointXYZ> pass_y;
-    pass_y.setInputCloud(temp_cloud);
-    pass_y.setFilterFieldName("y");
-    pass_y.setFilterLimits(-range_y/2.0, range_y/2.0);
-    pass_y.filter(*temp_cloud);
-    
-    // Z方向フィルタ (max_height以下)
-    pcl::PassThrough<pcl::PointXYZ> pass_z;
-    pass_z.setInputCloud(temp_cloud);
-    pass_z.setFilterFieldName("z");
-    pass_z.setFilterLimits(-10.0, max_height); // 下限は十分低く設定
-    pass_z.filter(*filtered_cloud);
-
-    RCLCPP_DEBUG(logger, "穴検知範囲フィルタ: %zu -> %zu点",
-                cloud->size(), filtered_cloud->size());
-    return filtered_cloud;
-}
-
 bool rayPlaneIntersection(
     const pcl::PointXYZ &ray_start,
     const pcl::PointXYZ &ray_end,
@@ -214,15 +177,22 @@ bool rayPlaneIntersection(
     }
     
     // 交点パラメータt を計算
-    double numerator = -(plane.a * ray_start.x + plane.b * ray_start.y + 
+    double numerator = -(plane.a * ray_start.x + plane.b * ray_start.y +
                         plane.c * ray_start.z + plane.d);
     double t = numerator / denominator;
-    
+
+    // 交点がLiDARとpointの間にあるかチェック（0 < t < 1）
+    // t < 0: 背面の偽穴（LiDARより手前）を除外
+    // t >= 1: point位置またはそれより先を除外
+    if (t <= 0.0 || t >= 1.0) {
+        return false; // 範囲外
+    }
+
     // 交点を計算
     intersection.x = ray_start.x + t * dx;
     intersection.y = ray_start.y + t * dy;
     intersection.z = ray_start.z + t * dz;
-    
+
     return true;
 }
 
@@ -231,35 +201,82 @@ pcl::PointCloud<pcl::PointXYZ>::Ptr detectHoles(
     const pcl::PointXYZ &lidar_origin,
     const GroundPlane &ground_plane,
     double ground_tolerance,
-    rclcpp::Logger logger)
+    rclcpp::Logger logger,
+    pcl::PointCloud<pcl::PointXYZRGB>::Ptr &raw_hole_points)
 {
     pcl::PointCloud<pcl::PointXYZ>::Ptr hole_cloud(new pcl::PointCloud<pcl::PointXYZ>);
-    
-    for (const auto &point : cloud->points) {
-        // LiDARから点への光線と地面平面の交点を計算
-        pcl::PointXYZ intersection;
-        if (!rayPlaneIntersection(lidar_origin, point, ground_plane, intersection)) {
-            continue; // 交点計算失敗（平行など）
-        }
-        
-        // 距離ベース穴判定（より精密な検知）
-        double lidar_to_point_distance = sqrt(
-            pow(point.x - lidar_origin.x, 2) + 
-            pow(point.y - lidar_origin.y, 2) + 
-            pow(point.z - lidar_origin.z, 2));
-        double lidar_to_intersection_distance = sqrt(
-            pow(intersection.x - lidar_origin.x, 2) + 
-            pow(intersection.y - lidar_origin.y, 2) + 
-            pow(intersection.z - lidar_origin.z, 2));
 
-        // 実際の点が期待される地面交点より明らかに遠い場合のみ穴と判定
-        if (lidar_to_point_distance > lidar_to_intersection_distance + ground_tolerance) {
-            hole_cloud->points.push_back(intersection);
+    // raw_hole_pointsの初期化
+    if (raw_hole_points) {
+        raw_hole_points->clear();
+    }
+
+    int intersection_found_count = 0;
+    int intersection_not_found_count = 0;
+    bool warning_logged = false;  // 1フレームあたり1回のみ警告
+
+    for (const auto &point : cloud->points) {
+        // point(x, y)位置での地面平面のZ値を計算
+        // 平面方程式: a*x + b*y + c*z + d = 0 → z = -(a*x + b*y + d) / c
+        double plane_z_at_point = -(ground_plane.a * point.x +
+                                     ground_plane.b * point.y +
+                                     ground_plane.d) / ground_plane.c;
+
+        // pointが地面平面より十分低いか判定（tolerance分だけ低い必要がある）
+        if (point.z < plane_z_at_point - ground_tolerance) {
+            // 光線と地面平面の交点を計算
+            pcl::PointXYZ intersection;
+            bool intersection_found = rayPlaneIntersection(
+                lidar_origin, point, ground_plane, intersection);
+
+            if (intersection_found) {
+                // 交点が見つかった → 穴位置として出力
+                hole_cloud->points.push_back(intersection);
+                intersection_found_count++;
+
+                // デバッグ用：緑色でraw点を保存
+                if (raw_hole_points) {
+                    pcl::PointXYZRGB colored_point;
+                    colored_point.x = point.x;
+                    colored_point.y = point.y;
+                    colored_point.z = point.z;
+                    colored_point.r = 0;
+                    colored_point.g = 255;
+                    colored_point.b = 0;
+                    raw_hole_points->points.push_back(colored_point);
+                }
+            } else {
+                // 交点が見つからない（異常ケース：背面の偽穴など）
+                intersection_not_found_count++;
+
+                // デバッグ用：赤色でraw点を保存
+                if (raw_hole_points) {
+                    pcl::PointXYZRGB colored_point;
+                    colored_point.x = point.x;
+                    colored_point.y = point.y;
+                    colored_point.z = point.z;
+                    colored_point.r = 255;
+                    colored_point.g = 0;
+                    colored_point.b = 0;
+                    raw_hole_points->points.push_back(colored_point);
+                }
+
+                // 1フレームあたり1回のみ警告
+                if (!warning_logged) {
+                    RCLCPP_WARN(logger,
+                        "穴と判定されたが交点が見つからない点を検出 (背面の偽穴など): %d点",
+                        intersection_not_found_count);
+                    warning_logged = true;
+                }
+            }
         }
     }
 
-    RCLCPP_DEBUG(logger, "穴検知: %zu点中%zu点の穴を検出",
-                cloud->size(), hole_cloud->size());
+    RCLCPP_DEBUG(logger,
+        "穴検知: %zu点中%zu点を穴として検出 (交点発見: %d, 交点未発見: %d)",
+        cloud->size(), hole_cloud->size(),
+        intersection_found_count, intersection_not_found_count);
+
     return hole_cloud;
 }
 
@@ -462,61 +479,4 @@ bool estimateGroundPlaneRANSAC(
                 100.0 * inliers->indices.size() / ground_cloud->size());
 
     return true;
-}
-
-pcl::PointCloud<pcl::PointXYZ>::Ptr detectHolesWithHeightCheck(
-    const pcl::PointCloud<pcl::PointXYZ>::Ptr &cloud,
-    const pcl::PointXYZ &lidar_origin,
-    const GroundPlane &ground_plane,
-    double ground_tolerance,
-    double height_buffer,
-    rclcpp::Logger logger,
-    pcl::PointCloud<pcl::PointXYZ>::Ptr &raw_hole_points)
-{
-    pcl::PointCloud<pcl::PointXYZ>::Ptr hole_cloud(new pcl::PointCloud<pcl::PointXYZ>);
-
-    // デバッグ用raw点群が指定されている場合は初期化
-    if (raw_hole_points) {
-        raw_hole_points->clear();
-    }
-
-    for (const auto &point : cloud->points) {
-        // LiDARから点への光線と地面平面の交点を計算
-        pcl::PointXYZ intersection;
-        if (!rayPlaneIntersection(lidar_origin, point, ground_plane, intersection)) {
-            continue; // 交点計算失敗（平行など）
-        }
-
-        // 【高さチェック】点が地面より明らかに高い場合はスキップ（壁や障害物の誤検知防止）
-        // height_buffer: 点群のブレを考慮したバッファ（デフォルト0.1m）
-        // 注意: 全点探索に変更する場合は、このif文をコメントアウトしてください
-        if (point.z > intersection.z + height_buffer) {
-            continue;  // 地面より高い点は穴ではなく障害物
-        }
-
-        // 距離ベース穴判定（より精密な検知）
-        double lidar_to_point_distance = sqrt(
-            pow(point.x - lidar_origin.x, 2) +
-            pow(point.y - lidar_origin.y, 2) +
-            pow(point.z - lidar_origin.z, 2));
-        double lidar_to_intersection_distance = sqrt(
-            pow(intersection.x - lidar_origin.x, 2) +
-            pow(intersection.y - lidar_origin.y, 2) +
-            pow(intersection.z - lidar_origin.z, 2));
-
-        // 実際の点が期待される地面交点より明らかに遠い場合のみ穴と判定
-        if (lidar_to_point_distance > lidar_to_intersection_distance + ground_tolerance) {
-            // 地面平面との交点を穴点として登録
-            hole_cloud->points.push_back(intersection);
-
-            // デバッグ用：元の測定点（地面より低い点）も保存
-            if (raw_hole_points) {
-                raw_hole_points->points.push_back(point);
-            }
-        }
-    }
-
-    RCLCPP_DEBUG(logger, "高さチェック付き穴検知: %zu点中%zu点を穴として検知",
-                cloud->size(), hole_cloud->size());
-    return hole_cloud;
 }

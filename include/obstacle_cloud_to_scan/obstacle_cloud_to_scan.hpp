@@ -34,7 +34,7 @@ private:
     // Hole detection functions
     pcl::PointCloud<pcl::PointXYZ>::Ptr detectHoles(
         const pcl::PointCloud<pcl::PointXYZ>::Ptr &cloud,
-        pcl::PointCloud<pcl::PointXYZ>::Ptr &raw_hole_points);
+        pcl::PointCloud<pcl::PointXYZRGB>::Ptr &raw_hole_points);
 
     // Ground plane initialization
     void initializeGroundPlane();
@@ -106,6 +106,11 @@ private:
     GroundPlane ground_plane_;
     pcl::PointXYZ lidar_origin_;
     bool ground_plane_initialized_;
+
+    // LiDAR origin parameters (fallback when TF is unavailable)
+    double lidar_origin_x_;
+    double lidar_origin_y_;
+    double lidar_origin_z_;
 
     std::vector<double> processing_times_;
     std::vector<size_t> downsampled_points_counts_;

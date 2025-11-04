@@ -57,14 +57,6 @@ bool applyProgressiveMorphologicalFilterWithGround(
     double max_distance,
     double cell_size);
 
-// 穴検知用フィルタ
-pcl::PointCloud<pcl::PointXYZ>::Ptr filterHoleDetectionRange(
-    const pcl::PointCloud<pcl::PointXYZ>::Ptr &cloud,
-    double range_x,
-    double range_y,
-    double max_height,
-    rclcpp::Logger logger);
-
 // 光線と平面の交点計算
 bool rayPlaneIntersection(
     const pcl::PointXYZ &ray_start,
@@ -72,13 +64,14 @@ bool rayPlaneIntersection(
     const GroundPlane &plane,
     pcl::PointXYZ &intersection);
 
-// 穴検知
+// 穴検知（統合版：シンプルな判定ロジック）
 pcl::PointCloud<pcl::PointXYZ>::Ptr detectHoles(
     const pcl::PointCloud<pcl::PointXYZ>::Ptr &cloud,
     const pcl::PointXYZ &lidar_origin,
     const GroundPlane &ground_plane,
     double ground_tolerance,
-    rclcpp::Logger logger);
+    rclcpp::Logger logger,
+    pcl::PointCloud<pcl::PointXYZRGB>::Ptr &raw_hole_points);
 
 // ===============================================
 // 動的地面平面推定関数群
@@ -98,16 +91,6 @@ bool estimateGroundPlaneRANSAC(
     double distance_threshold,
     int max_iterations,
     rclcpp::Logger logger);
-
-// 高さチェック付き穴検知
-pcl::PointCloud<pcl::PointXYZ>::Ptr detectHolesWithHeightCheck(
-    const pcl::PointCloud<pcl::PointXYZ>::Ptr &cloud,
-    const pcl::PointXYZ &lidar_origin,
-    const GroundPlane &ground_plane,
-    double ground_tolerance,
-    double height_buffer,  // 地面より高い点のスキップバッファ
-    rclcpp::Logger logger,
-    pcl::PointCloud<pcl::PointXYZ>::Ptr &raw_hole_points);  // デバッグ用：元の穴点（地面より低い点）
 
 // ===============================================
 // メモリ最適化フィルタリング関数群
